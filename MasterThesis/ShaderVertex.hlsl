@@ -4,10 +4,24 @@ struct VSOutput
     float3 col : COLOR;
 };
 
-VSOutput main(float2 pos : POSITION, float3 col : COLOR)
+[RootSignature("")]
+VSOutput main(uint vertId : SV_VertexID)
 {
     VSOutput result;
-    result.pos = float4(pos, 0, 1);
-    result.col = col;
+    switch (vertId)
+    {
+        case 0:
+            result.pos = float4(0, 0, 0, 1);
+            break;
+        case 1:
+            result.pos = float4(0, 1, 0, 1);
+            break;
+        case 2:
+            result.pos = float4(1, 0, 0, 1);
+            break;
+    }
+    result.col = float3(1, 1, 1);
+    //result.pos = float4(pos, 0, 1);
+    //result.col = col;
     return result;
 }

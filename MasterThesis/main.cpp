@@ -12,8 +12,8 @@ ComPtr<IDXGISwapChain3> pSwapChain;
 ComPtr<ID3D12CommandAllocator> pCommandAllocator;
 
 PResource pRenderTargets[FRAME_COUNT];
-PResource pVertexBuffer;
-D3D12_VERTEX_BUFFER_VIEW vertexBufferView = {};
+// PResource pVertexBuffer;
+// D3D12_VERTEX_BUFFER_VIEW vertexBufferView = {};
 
 ComPtr<ID3D12DescriptorHeap> pRtvHeap;
 UINT rtvDescSize;
@@ -164,18 +164,6 @@ void LoadPipeline()
 void LoadAssets()
 {
     {
-        CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
-        // rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-        rootSignatureDesc.Init(0, nullptr, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-        PBlob pSignature;
-        PBlob pError;
-        ThrowIfFailed(
-            D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &pSignature, &pError));
-        ThrowIfFailed(pDevice->CreateRootSignature(0, pSignature->GetBufferPointer(), pSignature->GetBufferSize(),
-                                                   IID_PPV_ARGS(&pRootSignature)));
-    }
-
-    {
         PBlob vertexShader;
         PBlob pixelShader;
 
@@ -189,6 +177,8 @@ void LoadAssets()
                                          &vertexShader, nullptr));
         ThrowIfFailed(D3DCompileFromFile(L"ShaderPixel.hlsl", nullptr, nullptr, "main", "ps_5_0", compileFlags, 0,
                                          &pixelShader, nullptr));
+        ThrowIfFailed(pDevice->CreateRootSignature(0, vertexShader->GetBufferPointer(), vertexShader->GetBufferSize(),
+                                                   IID_PPV_ARGS(&pRootSignature)));
 
         D3D12_INPUT_ELEMENT_DESC inputElementDesc[2];
 
@@ -225,8 +215,8 @@ void LoadAssets()
         psoDesc.DSVFormat = DXGI_FORMAT_R32_FLOAT;
         psoDesc.SampleDesc.Count = 1;
         psoDesc.SampleDesc.Quality = 0;
-        psoDesc.InputLayout.pInputElementDescs = inputElementDesc;
-        psoDesc.InputLayout.NumElements = 2;
+        psoDesc.InputLayout.pInputElementDescs = nullptr;
+        psoDesc.InputLayout.NumElements = 0;
 
         ThrowIfFailed(pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pPipelineState)));
     }
@@ -235,6 +225,7 @@ void LoadAssets()
                                              pPipelineState.Get(), IID_PPV_ARGS(&pCommandList)));
     ThrowIfFailed(pCommandList->Close());
 
+    /*
     {
         float vertices[] = {
             0.0f, 0.0f,       // position
@@ -262,6 +253,7 @@ void LoadAssets()
         vertexBufferView.SizeInBytes = vertexBufferSize;
         vertexBufferView.StrideInBytes = 20;
     }
+    */
 
     {
         ThrowIfFailed(pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&pFence)));
@@ -306,7 +298,7 @@ void FillCommandList()
     constexpr float CLEAR_COLOR[] = {0.0f, 0.2f, 0.4f, 1.0f};
     pCommandList->ClearRenderTargetView(rtvHandle, CLEAR_COLOR, 0, nullptr);
     pCommandList->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    pCommandList->IASetVertexBuffers(0, 1, &vertexBufferView);
+    // pCommandList->IASetVertexBuffers(0, 1, &vertexBufferView);
     pCommandList->DrawInstanced(3, 1, 0, 0);
 
     barrier = CD3DX12_RESOURCE_BARRIER::Transition(pRenderTargets[curFrame].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET,
