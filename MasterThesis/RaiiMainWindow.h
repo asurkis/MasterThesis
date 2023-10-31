@@ -17,8 +17,9 @@ class RaiiMainWindow
         if (!RegisterClassExW(&wc))
             throw std::runtime_error("Could not register window class");
 
-        hWnd = CreateWindowExW(0, WINDOW_CLASS_NAME, L"Window1", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
-                               CW_USEDEFAULT, CW_USEDEFAULT, HWND_DESKTOP, nullptr, hInstance, nullptr);
+        hWnd = CreateWindowExW(0, WINDOW_CLASS_NAME, L"Window1", WS_OVERLAPPEDWINDOW & ~(WS_SIZEBOX | WS_MAXIMIZEBOX),
+                               CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, HWND_DESKTOP, nullptr,
+                               hInstance, nullptr);
         if (!hWnd)
             throw std::runtime_error("Could not create window");
     }

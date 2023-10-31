@@ -30,4 +30,8 @@
   <ItemGroup>
     <None Include=".clang-format" />
   </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="ShaderVertex.hlsl" />
+    <FxCompile Include="ShaderPixel.hlsl" />
+  </ItemGroup>
 </Project>
