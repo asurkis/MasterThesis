@@ -9,12 +9,17 @@
 #include <dxgi1_6.h>
 #include <wrl.h>
 
-#include <fstream>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
+#include <optional>
+
+#include "imgui.h"
+#include "imgui_impl_dx12.h"
+#include "imgui_impl_win32.h"
 
 using Microsoft::WRL::ComPtr;
 

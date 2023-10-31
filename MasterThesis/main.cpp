@@ -3,6 +3,7 @@
 #include "UtilWin32.h"
 
 using PBlob = ComPtr<ID3DBlob>;
+using PDescriptorHeap = ComPtr<ID3D12DescriptorHeap>;
 using PResource = ComPtr<ID3D12Resource>;
 
 bool useWarpDevice = false;
@@ -15,8 +16,17 @@ PResource pRenderTargets[FRAME_COUNT];
 // PResource pVertexBuffer;
 // D3D12_VERTEX_BUFFER_VIEW vertexBufferView = {};
 
-ComPtr<ID3D12DescriptorHeap> pRtvHeap;
+PDescriptorHeap pRtvHeap;
 UINT rtvDescSize;
+
+enum SrvDescriptors
+{
+    MY_SRV_DESC_IMGUI = 0,
+    MY_SRV_DESC_TOTAL
+};
+
+PDescriptorHeap pSrvHeap;
+UINT srvDescSize;
 
 UINT curFrame = 0;
 
@@ -26,10 +36,10 @@ CD3DX12_VIEWPORT viewport;
 ComPtr<ID3D12RootSignature> pRootSignature;
 ComPtr<ID3D12PipelineState> pPipelineState;
 
-ComPtr<ID3D12GraphicsCommandList> pCommandList;
+ComPtr<ID3D12GraphicsCommandList6> pCommandList;
 ComPtr<ID3D12Fence> pFence;
 UINT64 nextFenceValue = 1;
-HANDLE hFenceEvent = nullptr;
+RaiiHandle hFenceEvent = nullptr;
 
 ComPtr<IDXGIAdapter1> GetHWAdapter(ComPtr<IDXGIFactory1> pFactory1)
 {
@@ -146,6 +156,16 @@ void LoadPipeline()
         ThrowIfFailed(pDevice->CreateDescriptorHeap(&rtvDesc, IID_PPV_ARGS(&pRtvHeap)));
 
         rtvDescSize = pDevice->GetDescriptorHandleIncrementSize(rtvDesc.Type);
+    }
+
+    {
+        D3D12_DESCRIPTOR_HEAP_DESC srvDesc = {};
+        srvDesc.NumDescriptors = MY_SRV_DESC_TOTAL;
+        srvDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        srvDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+
+        ThrowIfFailed(pDevice->CreateDescriptorHeap(&srvDesc, IID_PPV_ARGS(&pSrvHeap)));
+        srvDescSize = pDevice->GetDescriptorHandleIncrementSize(srvDesc.Type);
     }
 
     {
@@ -281,10 +301,39 @@ void LoadAssets()
         nextFenceValue = 1;
 
         hFenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-        if (!hFenceEvent)
+        if (!hFenceEvent.Get())
             ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
     }
 }
+
+class RaiiImgui
+{
+  public:
+    RaiiImgui()
+    {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO &io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
+        ImGui_ImplWin32_Init(hWnd);
+        CD3DX12_CPU_DESCRIPTOR_HANDLE cpuHandle(pSrvHeap->GetCPUDescriptorHandleForHeapStart(), MY_SRV_DESC_IMGUI,
+                                                srvDescSize);
+        CD3DX12_GPU_DESCRIPTOR_HANDLE gpuHandle(pSrvHeap->GetGPUDescriptorHandleForHeapStart(), MY_SRV_DESC_IMGUI,
+                                                srvDescSize);
+        ImGui_ImplDX12_Init(pDevice.Get(), FRAME_COUNT, DXGI_FORMAT_R8G8B8A8_UNORM, pSrvHeap.Get(), cpuHandle, gpuHandle);
+    }
+
+    ~RaiiImgui()
+    {
+        ImGui_ImplDX12_Shutdown();
+        ImGui_ImplWin32_Shutdown();
+        ImGui::DestroyContext();
+    }
+};
+
+std::optional<RaiiImgui> raiiImgui;
 
 void WaitForLastFrame()
 {
@@ -294,8 +343,8 @@ void WaitForLastFrame()
 
     if (pFence->GetCompletedValue() < value)
     {
-        ThrowIfFailed(pFence->SetEventOnCompletion(value, hFenceEvent));
-        WaitForSingleObject(hFenceEvent, INFINITE);
+        ThrowIfFailed(pFence->SetEventOnCompletion(value, hFenceEvent.Get()));
+        WaitForSingleObject(hFenceEvent.Get(), INFINITE);
     }
 
     curFrame = pSwapChain->GetCurrentBackBufferIndex();
@@ -305,6 +354,10 @@ void FillCommandList()
 {
     ThrowIfFailed(pCommandAllocator->Reset());
     ThrowIfFailed(pCommandList->Reset(pCommandAllocator.Get(), pPipelineState.Get()));
+
+    ID3D12DescriptorHeap *heapsToSet[] = {pSrvHeap.Get()};
+    pCommandList->SetDescriptorHeaps(1, heapsToSet);
+
     pCommandList->SetGraphicsRootSignature(pRootSignature.Get());
     pCommandList->RSSetViewports(1, &viewport);
     pCommandList->RSSetScissorRects(1, &scissorRect);
@@ -320,17 +373,25 @@ void FillCommandList()
     pCommandList->ClearRenderTargetView(rtvHandle, CLEAR_COLOR, 0, nullptr);
     pCommandList->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     // pCommandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-    pCommandList->DrawInstanced(3, 1, 0, 0);
+    pCommandList->DispatchMesh(1, 1, 1);
 
     barrier = CD3DX12_RESOURCE_BARRIER::Transition(pRenderTargets[curFrame].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET,
                                                    D3D12_RESOURCE_STATE_PRESENT);
     pCommandList->ResourceBarrier(1, &barrier);
+
+    ImGui::Render();
+    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCommandList.Get());
 
     ThrowIfFailed(pCommandList->Close());
 }
 
 void OnRender()
 {
+    ImGui_ImplDX12_NewFrame();
+    ImGui_ImplWin32_NewFrame();
+    ImGui::NewFrame();
+    ImGui::ShowDemoWindow();
+
     FillCommandList();
     ID3D12CommandList *ppCommandLists[] = {pCommandList.Get()};
     pCommandQueueDirect->ExecuteCommandLists(1, ppCommandLists);
@@ -350,6 +411,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hCurInstance, _In_opt_ HINSTANCE hPrevInstanc
 
         LoadPipeline();
         LoadAssets();
+        raiiImgui.emplace();
         WaitForLastFrame();
 
         ShowWindow(hWnd, nShowCmd);
@@ -364,7 +426,6 @@ int WINAPI wWinMain(_In_ HINSTANCE hCurInstance, _In_opt_ HINSTANCE hPrevInstanc
         }
 
         WaitForLastFrame();
-        CloseHandle(hFenceEvent);
         return msg.wParam;
     }
     catch (const std::runtime_error &err)
@@ -374,8 +435,13 @@ int WINAPI wWinMain(_In_ HINSTANCE hCurInstance, _In_opt_ HINSTANCE hPrevInstanc
     }
 }
 
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+
 LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
+        return 1;
+
     switch (uMsg)
     {
     case WM_CLOSE:
