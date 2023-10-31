@@ -1,12 +1,12 @@
 #include "common.h"
 
-#include "RaiiMainWindow.h"
+#include "UtilWin32.h"
 
 using PBlob = ComPtr<ID3DBlob>;
 using PResource = ComPtr<ID3D12Resource>;
 
 bool useWarpDevice = false;
-ComPtr<ID3D12Device> pDevice;
+ComPtr<ID3D12Device2> pDevice;
 ComPtr<ID3D12CommandQueue> pCommandQueueDirect;
 ComPtr<IDXGISwapChain3> pSwapChain;
 ComPtr<ID3D12CommandAllocator> pCommandAllocator;
@@ -161,25 +161,39 @@ void LoadPipeline()
     ThrowIfFailed(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&pCommandAllocator)));
 }
 
+std::vector<BYTE> ReadFile(const std::filesystem::path &path)
+{
+    std::basic_ifstream<BYTE> fin(path, std::ios::binary);
+    if (!fin)
+        throw std::runtime_error("Could not open file");
+    fin.seekg(0, std::ios::end);
+    size_t len = fin.tellg();
+    fin.seekg(0, std::ios::beg);
+    std::vector<BYTE> bytes(len);
+    fin.read(bytes.data(), len);
+    return bytes;
+}
+
+std::filesystem::path GetAssetPath()
+{
+    constexpr size_t BUFLEN = 1024;
+    WCHAR buf[BUFLEN];
+    GetModuleFileNameW(nullptr, buf, BUFLEN);
+    std::filesystem::path path(buf);
+    path.remove_filename();
+    return path;
+}
+
 void LoadAssets()
 {
     {
-        PBlob vertexShader;
-        PBlob pixelShader;
+        std::filesystem::path basePath = GetAssetPath();
+        std::vector<BYTE> dataMS = ReadFile(basePath / L"MainMS.cso");
+        std::vector<BYTE> dataPS = ReadFile(basePath / L"MainPS.cso");
 
-#ifdef _DEBUG
-        UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
-#else
-        UINT compileFlags = 0;
-#endif
+        ThrowIfFailed(pDevice->CreateRootSignature(0, dataMS.data(), dataMS.size(), IID_PPV_ARGS(&pRootSignature)));
 
-        ThrowIfFailed(D3DCompileFromFile(L"ShaderVertex.hlsl", nullptr, nullptr, "main", "vs_5_0", compileFlags, 0,
-                                         &vertexShader, nullptr));
-        ThrowIfFailed(D3DCompileFromFile(L"ShaderPixel.hlsl", nullptr, nullptr, "main", "ps_5_0", compileFlags, 0,
-                                         &pixelShader, nullptr));
-        ThrowIfFailed(pDevice->CreateRootSignature(0, vertexShader->GetBufferPointer(), vertexShader->GetBufferSize(),
-                                                   IID_PPV_ARGS(&pRootSignature)));
-
+        /*
         D3D12_INPUT_ELEMENT_DESC inputElementDesc[2];
 
         inputElementDesc[0].SemanticName = "POSITION";
@@ -197,13 +211,14 @@ void LoadAssets()
         inputElementDesc[1].AlignedByteOffset = 8;
         inputElementDesc[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
         inputElementDesc[1].InstanceDataStepRate = 0;
+        */
 
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+        D3DX12_MESH_SHADER_PIPELINE_STATE_DESC psoDesc = {};
         psoDesc.pRootSignature = pRootSignature.Get();
-        psoDesc.VS.pShaderBytecode = vertexShader->GetBufferPointer();
-        psoDesc.VS.BytecodeLength = vertexShader->GetBufferSize();
-        psoDesc.PS.pShaderBytecode = pixelShader->GetBufferPointer();
-        psoDesc.PS.BytecodeLength = pixelShader->GetBufferSize();
+        psoDesc.MS.pShaderBytecode = dataMS.data();
+        psoDesc.MS.BytecodeLength = dataMS.size();
+        psoDesc.PS.pShaderBytecode = dataPS.data();
+        psoDesc.PS.BytecodeLength = dataPS.size();
         psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
         psoDesc.SampleMask = UINT_MAX;
         psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
@@ -215,10 +230,16 @@ void LoadAssets()
         psoDesc.DSVFormat = DXGI_FORMAT_R32_FLOAT;
         psoDesc.SampleDesc.Count = 1;
         psoDesc.SampleDesc.Quality = 0;
-        psoDesc.InputLayout.pInputElementDescs = nullptr;
-        psoDesc.InputLayout.NumElements = 0;
+        psoDesc.CachedPSO = {};
+        psoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
-        ThrowIfFailed(pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pPipelineState)));
+        CD3DX12_PIPELINE_MESH_STATE_STREAM psoStream(psoDesc);
+
+        D3D12_PIPELINE_STATE_STREAM_DESC streamDesc = {};
+        streamDesc.pPipelineStateSubobjectStream = &psoStream;
+        streamDesc.SizeInBytes = sizeof(psoStream);
+
+        ThrowIfFailed(pDevice->CreatePipelineState(&streamDesc, IID_PPV_ARGS(&pPipelineState)));
     }
 
     ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, pCommandAllocator.Get(),

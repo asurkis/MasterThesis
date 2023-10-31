@@ -9,9 +9,12 @@
 #include <dxgi1_6.h>
 #include <wrl.h>
 
+#include <fstream>
+#include <filesystem>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <vector>
 
 using Microsoft::WRL::ComPtr;
 
