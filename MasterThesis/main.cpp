@@ -322,12 +322,12 @@ void FillCommandList()
     // pCommandList->IASetVertexBuffers(0, 1, &vertexBufferView);
     pCommandList->DispatchMesh(1, 1, 1);
 
+    ImGui::Render();
+    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCommandList.Get());
+
     barrier = CD3DX12_RESOURCE_BARRIER::Transition(pRenderTargets[curFrame].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET,
                                                    D3D12_RESOURCE_STATE_PRESENT);
     pCommandList->ResourceBarrier(1, &barrier);
-
-    ImGui::Render();
-    ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCommandList.Get());
 
     ThrowIfFailed(pCommandList->Close());
 }
