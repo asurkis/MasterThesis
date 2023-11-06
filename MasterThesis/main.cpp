@@ -1,10 +1,7 @@
 #include "common.h"
 
+#include "UtilD3D.h"
 #include "UtilWin32.h"
-
-using PBlob = ComPtr<ID3DBlob>;
-using PDescriptorHeap = ComPtr<ID3D12DescriptorHeap>;
-using PResource = ComPtr<ID3D12Resource>;
 
 bool useWarpDevice = false;
 ComPtr<ID3D12Device2> pDevice;
@@ -19,6 +16,8 @@ PResource pRenderTargets[FRAME_COUNT];
 PDescriptorHeap pRtvHeap;
 UINT rtvDescSize;
 
+UINT curFrame = 0;
+
 enum SrvDescriptors
 {
     MY_SRV_DESC_IMGUI = 0,
@@ -27,8 +26,6 @@ enum SrvDescriptors
 
 PDescriptorHeap pSrvHeap;
 UINT srvDescSize;
-
-UINT curFrame = 0;
 
 D3D12_RECT scissorRect = {};
 CD3DX12_VIEWPORT viewport;
@@ -40,47 +37,6 @@ ComPtr<ID3D12GraphicsCommandList6> pCommandList;
 ComPtr<ID3D12Fence> pFence;
 UINT64 nextFenceValue = 1;
 RaiiHandle hFenceEvent = nullptr;
-
-ComPtr<IDXGIAdapter1> GetHWAdapter(ComPtr<IDXGIFactory1> pFactory1)
-{
-    ComPtr<IDXGIFactory6> pFactory;
-    ThrowIfFailed(pFactory1.As(&pFactory));
-
-    for (UINT i = 0;; ++i)
-    {
-        ComPtr<IDXGIAdapter1> pAdapter;
-        if (FAILED(
-                pFactory->EnumAdapterByGpuPreference(i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&pAdapter))))
-            break;
-
-        DXGI_ADAPTER_DESC1 desc = {};
-        pAdapter->GetDesc1(&desc);
-
-        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
-            continue;
-
-        if (SUCCEEDED(D3D12CreateDevice(pAdapter.Get(), NEEDED_FEATURE_LEVEL, _uuidof(ID3D12Device), nullptr)))
-            return pAdapter;
-    }
-
-    for (UINT i = 0;; ++i)
-    {
-        ComPtr<IDXGIAdapter1> pAdapter = nullptr;
-        if (FAILED(pFactory->EnumAdapters1(i, &pAdapter)))
-            break;
-
-        DXGI_ADAPTER_DESC1 desc = {};
-        pAdapter->GetDesc1(&desc);
-
-        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
-            continue;
-
-        if (SUCCEEDED(D3D12CreateDevice(pAdapter.Get(), NEEDED_FEATURE_LEVEL, _uuidof(ID3D12Device), nullptr)))
-            return pAdapter;
-    }
-
-    return nullptr;
-}
 
 void LoadPipeline()
 {
@@ -179,29 +135,6 @@ void LoadPipeline()
     }
 
     ThrowIfFailed(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&pCommandAllocator)));
-}
-
-std::vector<BYTE> ReadFile(const std::filesystem::path &path)
-{
-    std::basic_ifstream<BYTE> fin(path, std::ios::binary);
-    if (!fin)
-        throw std::runtime_error("Could not open file");
-    fin.seekg(0, std::ios::end);
-    size_t len = fin.tellg();
-    fin.seekg(0, std::ios::beg);
-    std::vector<BYTE> bytes(len);
-    fin.read(bytes.data(), len);
-    return bytes;
-}
-
-std::filesystem::path GetAssetPath()
-{
-    constexpr size_t BUFLEN = 1024;
-    WCHAR buf[BUFLEN];
-    GetModuleFileNameW(nullptr, buf, BUFLEN);
-    std::filesystem::path path(buf);
-    path.remove_filename();
-    return path;
 }
 
 void LoadAssets()
@@ -322,7 +255,8 @@ class RaiiImgui
                                                 srvDescSize);
         CD3DX12_GPU_DESCRIPTOR_HANDLE gpuHandle(pSrvHeap->GetGPUDescriptorHandleForHeapStart(), MY_SRV_DESC_IMGUI,
                                                 srvDescSize);
-        ImGui_ImplDX12_Init(pDevice.Get(), FRAME_COUNT, DXGI_FORMAT_R8G8B8A8_UNORM, pSrvHeap.Get(), cpuHandle, gpuHandle);
+        ImGui_ImplDX12_Init(pDevice.Get(), FRAME_COUNT, DXGI_FORMAT_R8G8B8A8_UNORM, pSrvHeap.Get(), cpuHandle,
+                            gpuHandle);
     }
 
     ~RaiiImgui()

@@ -15,6 +15,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <vector>
+#include <string_view>
 #include <optional>
 
 #include "imgui.h"
@@ -23,7 +24,11 @@
 
 using Microsoft::WRL::ComPtr;
 
-inline void ThrowIfFailedFn(HRESULT hr, const char *file, int line)
+using PBlob = ComPtr<ID3DBlob>;
+using PDescriptorHeap = ComPtr<ID3D12DescriptorHeap>;
+using PResource = ComPtr<ID3D12Resource>;
+
+inline void ThrowIfFailedFn_(HRESULT hr, std::string_view file, int line)
 {
     if (SUCCEEDED(hr))
         return;
@@ -32,12 +37,4 @@ inline void ThrowIfFailedFn(HRESULT hr, const char *file, int line)
     throw std::runtime_error(oss.str());
 }
 
-#define ThrowIfFailed(hr) ThrowIfFailedFn(hr, __FILE__, __LINE__)
-
-inline HINSTANCE hInstance = nullptr;
-inline HWND hWnd = nullptr;
-
-constexpr D3D_FEATURE_LEVEL NEEDED_FEATURE_LEVEL = D3D_FEATURE_LEVEL_12_2;
-constexpr UINT FRAME_COUNT = 3;
-
-extern LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+#define ThrowIfFailed(hr) ThrowIfFailedFn_(hr, __FILE__, __LINE__)

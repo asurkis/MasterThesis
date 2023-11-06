@@ -2,41 +2,19 @@
 
 #include "common.h"
 
+extern LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+
+inline HINSTANCE hInstance = nullptr;
+inline HWND hWnd = nullptr;
+
 class RaiiMainWindow
 {
-    inline static LPCWSTR WINDOW_CLASS_NAME = L"WindowClass1";
-    inline static bool isInit = false;
-
   public:
     RaiiMainWindow(const RaiiMainWindow &) = delete;
     RaiiMainWindow &operator=(const RaiiMainWindow &) = delete;
 
-    explicit RaiiMainWindow()
-    {
-        if (isInit)
-            throw std::runtime_error("Initializing main window twice");
-        isInit = true;
-
-        WNDCLASSEXW wc = {};
-        wc.cbSize = sizeof(WNDCLASSEX);
-        wc.style = CS_HREDRAW | CS_VREDRAW;
-        wc.lpszClassName = WINDOW_CLASS_NAME;
-        wc.lpfnWndProc = WndProc;
-        if (!RegisterClassExW(&wc))
-            throw std::runtime_error("Could not register window class");
-
-        hWnd = CreateWindowExW(0, WINDOW_CLASS_NAME, L"Window1", WS_OVERLAPPEDWINDOW & ~(WS_SIZEBOX | WS_MAXIMIZEBOX),
-                               CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, HWND_DESKTOP, nullptr,
-                               hInstance, nullptr);
-        if (!hWnd)
-            throw std::runtime_error("Could not create window");
-    }
-
-    ~RaiiMainWindow()
-    {
-        DestroyWindow(hWnd);
-        UnregisterClassW(WINDOW_CLASS_NAME, hInstance);
-    }
+    explicit RaiiMainWindow();
+    ~RaiiMainWindow();
 };
 
 class RaiiHandle
@@ -44,47 +22,20 @@ class RaiiHandle
     HANDLE hSelf = nullptr;
 
   public:
-    RaiiHandle(HANDLE handle) : hSelf(handle)
-    {
-    }
-
-    ~RaiiHandle()
-    {
-        Clear();
-    }
-
     RaiiHandle(const RaiiHandle &) = delete;
     RaiiHandle &operator=(const RaiiHandle &) = delete;
 
-    RaiiHandle(RaiiHandle &&rhs) noexcept : hSelf(rhs.Release())
-    {
-    }
+    RaiiHandle(HANDLE handle);
+    ~RaiiHandle();
 
-    RaiiHandle &operator=(RaiiHandle &&rhs) noexcept
-    {
-        Clear();
-        hSelf = rhs.Release();
-        return *this;
-    }
+    RaiiHandle(RaiiHandle &&rhs) noexcept;
+    RaiiHandle &operator=(RaiiHandle &&rhs) noexcept;
 
-    HANDLE Get() const noexcept
-    {
-        return hSelf;
-    }
+    HANDLE Get() const noexcept;
+    HANDLE Release() noexcept;
 
-    HANDLE Release() noexcept
-    {
-        HANDLE h = hSelf;
-        hSelf = nullptr;
-        return h;
-    }
-
-    void Clear()
-    {
-        if (hSelf)
-        {
-            CloseHandle(hSelf);
-            hSelf = nullptr;
-        }
-    }
+    void Clear();
 };
+
+std::vector<unsigned char> ReadFile(const std::filesystem::path &path);
+std::filesystem::path GetAssetPath();
