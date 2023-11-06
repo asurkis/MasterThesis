@@ -25,6 +25,7 @@ class RaiiHandle
     RaiiHandle(const RaiiHandle &) = delete;
     RaiiHandle &operator=(const RaiiHandle &) = delete;
 
+    RaiiHandle() noexcept;
     RaiiHandle(HANDLE handle);
     ~RaiiHandle();
 

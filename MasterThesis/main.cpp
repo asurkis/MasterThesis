@@ -34,9 +34,9 @@ ComPtr<ID3D12RootSignature> pRootSignature;
 ComPtr<ID3D12PipelineState> pPipelineState;
 
 ComPtr<ID3D12GraphicsCommandList6> pCommandList;
-ComPtr<ID3D12Fence> pFence;
-UINT64 nextFenceValue = 1;
-RaiiHandle hFenceEvent = nullptr;
+PFence pFrameFence[FRAME_COUNT];
+UINT64 nextFenceValue[FRAME_COUNT];
+RaiiHandle hFenceEvent[FRAME_COUNT];
 
 void LoadPipeline()
 {
@@ -229,12 +229,13 @@ void LoadAssets()
     }
     */
 
+    for (UINT i = 0; i < FRAME_COUNT; ++i)
     {
-        ThrowIfFailed(pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&pFence)));
-        nextFenceValue = 1;
+        ThrowIfFailed(pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&pFrameFence[i])));
+        nextFenceValue[i] = 1;
 
-        hFenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-        if (!hFenceEvent.Get())
+        hFenceEvent[i] = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (!hFenceEvent[i].Get())
             ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
     }
 }
@@ -269,19 +270,31 @@ class RaiiImgui
 
 std::optional<RaiiImgui> raiiImgui;
 
-void WaitForLastFrame()
+void WaitForFrame(UINT frame)
 {
-    UINT64 value = nextFenceValue;
-    ThrowIfFailed(pCommandQueueDirect->Signal(pFence.Get(), value));
-    nextFenceValue++;
+    UINT64 value = nextFenceValue[frame]++;
+    ID3D12Fence *pFence = pFrameFence[frame].Get();
+    HANDLE hEvent = hFenceEvent->Get();
+
+    ThrowIfFailed(pCommandQueueDirect->Signal(pFence, value));
 
     if (pFence->GetCompletedValue() < value)
     {
-        ThrowIfFailed(pFence->SetEventOnCompletion(value, hFenceEvent.Get()));
-        WaitForSingleObject(hFenceEvent.Get(), INFINITE);
+        ThrowIfFailed(pFence->SetEventOnCompletion(value, hEvent));
+        WaitForSingleObject(hEvent, INFINITE);
     }
+}
 
+void WaitForCurFrame()
+{
+    WaitForFrame(curFrame);
     curFrame = pSwapChain->GetCurrentBackBufferIndex();
+}
+
+void WaitForAllFrames()
+{
+    for (UINT i = 0; i < FRAME_COUNT; ++i)
+        WaitForFrame(i);
 }
 
 void FillCommandList()
@@ -327,10 +340,11 @@ void OnRender()
     ImGui::ShowDemoWindow();
 
     FillCommandList();
+
     ID3D12CommandList *ppCommandLists[] = {pCommandList.Get()};
     pCommandQueueDirect->ExecuteCommandLists(1, ppCommandLists);
     ThrowIfFailed(pSwapChain->Present(1, 0));
-    WaitForLastFrame();
+    WaitForCurFrame();
 }
 
 int WINAPI wWinMain(_In_ HINSTANCE hCurInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR lpCmdLine,
@@ -346,7 +360,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hCurInstance, _In_opt_ HINSTANCE hPrevInstanc
         LoadPipeline();
         LoadAssets();
         raiiImgui.emplace();
-        WaitForLastFrame();
+        WaitForAllFrames();
 
         ShowWindow(hWnd, nShowCmd);
         // PostQuitMessage(0);
@@ -359,7 +373,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hCurInstance, _In_opt_ HINSTANCE hPrevInstanc
             OnRender();
         }
 
-        WaitForLastFrame();
+        WaitForAllFrames();
         return msg.wParam;
     }
     catch (const std::runtime_error &err)
@@ -390,6 +404,43 @@ LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             break;
         }
         break;
+
+    case WM_SIZE: {
+        UINT width = lParam & 0xFFFF;
+        UINT height = (lParam >> 16) & 0xFFFF;
+
+        scissorRect.left = 0;
+        scissorRect.top = 0;
+        scissorRect.right = width;
+        scissorRect.bottom = height;
+
+        viewport.TopLeftX = 0.0f;
+        viewport.TopLeftY = 0.0f;
+        viewport.Width = width;
+        viewport.Height = height;
+        viewport.MinDepth = D3D12_MIN_DEPTH;
+        viewport.MaxDepth = D3D12_MAX_DEPTH;
+
+        for (UINT i = 0; i < FRAME_COUNT; ++i)
+            pRenderTargets[i] = nullptr;
+
+        WaitForAllFrames();
+
+        pSwapChain->ResizeBuffers(FRAME_COUNT, width, height, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
+
+        {
+            CD3DX12_CPU_DESCRIPTOR_HANDLE handle(pRtvHeap->GetCPUDescriptorHandleForHeapStart());
+            for (UINT i = 0; i < FRAME_COUNT; ++i)
+            {
+                ThrowIfFailed(pSwapChain->GetBuffer(i, IID_PPV_ARGS(&pRenderTargets[i])));
+                pDevice->CreateRenderTargetView(pRenderTargets[i].Get(), nullptr, handle);
+                handle.Offset(1, rtvDescSize);
+            }
+        }
+
+        curFrame = pSwapChain->GetCurrentBackBufferIndex();
+        break;
+    }
 
     default:
         return DefWindowProc(hWnd, uMsg, wParam, lParam);
