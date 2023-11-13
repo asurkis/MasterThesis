@@ -1,25 +1,74 @@
+struct CameraData
+{
+    float4x4 MatView;
+    float4x4 MatProj;
+    float4x4 MatViewProj;
+    float4x4 MatNormalViewProj;
+};
+
+ConstantBuffer<CameraData> Camera : register(b0);
+
 struct VertexOut
 {
     float4 pos : SV_Position;
     float3 col : COLOR;
 };
 
-[RootSignature("")]
+[RootSignature("CBV(b0)")]
 [OutputTopology("triangle")]
-[numthreads(1, 1, 1)]
+[numthreads(32, 1, 1)]
 void main(
+    uint gtid : SV_GroupThreadID,
+    uint gid : SV_GroupID,
     out indices uint3 tris[128],
     out vertices VertexOut verts[128])
 {
-    SetMeshOutputCounts(3, 1);
+    SetMeshOutputCounts(8, 12);
     
-    verts[0].pos = float4(-1, -1, 0, 1);
-    verts[1].pos = float4(0, 1, 0, 1);
-    verts[2].pos = float4(1, 0, 0, 1);
+    static const uint3 CubeIdx[] =
+    {
+        uint3(0, 0, 0), // 0
+        uint3(1, 0, 0), // 1
+        uint3(0, 1, 0), // 2
+        uint3(1, 1, 0), // 3
+        uint3(0, 0, 1), // 4
+        uint3(1, 0, 1), // 5
+        uint3(0, 1, 1), // 6
+        uint3(1, 1, 1), // 7
+    };
     
-    verts[0].col = float3(0, 0, 1);
-    verts[1].col = float3(0, 1, 0);
-    verts[2].col = float3(1, 0, 0);
+    static const uint3 Prims[] =
+    {
+        // -Z
+        uint3(0, 1, 2),
+        uint3(3, 2, 1),
+        // +Z
+        uint3(6, 5, 4),
+        uint3(5, 6, 7),
+        // -Y
+        uint3(4, 1, 0),
+        uint3(1, 4, 5),
+        // +Y
+        uint3(2, 3, 6),
+        uint3(7, 6, 3),
+        // -X
+        uint3(0, 2, 4),
+        uint3(6, 4, 2),
+        // +X
+        uint3(5, 3, 1),
+        uint3(3, 5, 7),
+    };
     
-    tris[0] = uint3(0, 1, 2);
+    VertexOut vert;
+    if (gtid < 8)
+    {
+        vert.pos = float4(2 * float3(CubeIdx[gtid]) - float3(1, 1, 1), 1);
+        vert.col = float3(CubeIdx[gtid]);
+    }
+        
+    vert.pos = mul(vert.pos, transpose(Camera.MatViewProj));
+    verts[gtid] = vert;
+    
+    if (gtid < 12)
+        tris[gtid] = Prims[gtid];
 }

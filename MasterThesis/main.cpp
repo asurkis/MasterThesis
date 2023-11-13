@@ -2,6 +2,7 @@
 
 #include "UtilD3D.h"
 #include "UtilWin32.h"
+#include <DirectXMath.h>
 
 bool useWarpDevice = false;
 ComPtr<ID3D12Device2> pDevice;
@@ -10,17 +11,23 @@ ComPtr<IDXGISwapChain3> pSwapChain;
 ComPtr<ID3D12CommandAllocator> pCommandAllocator;
 
 PResource pRenderTargets[FRAME_COUNT];
+PResource pDepthBuffer;
+D3D12_CLEAR_VALUE depthClearValue = {};
 // PResource pVertexBuffer;
 // D3D12_VERTEX_BUFFER_VIEW vertexBufferView = {};
 
 PDescriptorHeap pRtvHeap;
 UINT rtvDescSize;
 
+PDescriptorHeap pDsvHeap;
+UINT dsvDescSize;
+
 UINT curFrame = 0;
 
 enum SrvDescriptors
 {
     MY_SRV_DESC_IMGUI = 0,
+    // MY_SRV_DESC_CAMERA,
     MY_SRV_DESC_TOTAL
 };
 
@@ -37,6 +44,19 @@ ComPtr<ID3D12GraphicsCommandList6> pCommandList;
 PFence pFrameFence[FRAME_COUNT];
 UINT64 nextFenceValue[FRAME_COUNT];
 RaiiHandle hFenceEvent[FRAME_COUNT];
+
+using namespace DirectX;
+
+struct CameraData
+{
+    XMMATRIX MatView;
+    XMMATRIX MatProj;
+    XMMATRIX MatViewProj;
+    XMMATRIX MatNormalViewProj;
+};
+
+CameraData CameraCB;
+PResource pCameraGPU;
 
 void LoadPipeline()
 {
@@ -65,6 +85,10 @@ void LoadPipeline()
         ThrowIfFailed(D3D12CreateDevice(pAdapter.Get(), NEEDED_FEATURE_LEVEL, IID_PPV_ARGS(&pDevice)));
     }
 
+    D3D12_FEATURE_DATA_SHADER_MODEL shaderModel[] = {D3D_SHADER_MODEL_6_5};
+    if (FAILED(pDevice->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, shaderModel, sizeof(shaderModel))))
+        throw std::runtime_error("Shader model 6.5 is not supported");
+
     D3D12_COMMAND_QUEUE_DESC commandQueueDesc = {};
     commandQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
     commandQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
@@ -87,8 +111,8 @@ void LoadPipeline()
 
     DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
     swapChainDesc.BufferCount = FRAME_COUNT;
-    swapChainDesc.BufferDesc.Width = wndRect.right - wndRect.left;
-    swapChainDesc.BufferDesc.Height = wndRect.bottom - wndRect.top;
+    swapChainDesc.BufferDesc.Width = viewport.Width;
+    swapChainDesc.BufferDesc.Height = viewport.Height;
     swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
@@ -110,8 +134,16 @@ void LoadPipeline()
         rtvDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
         rtvDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
         ThrowIfFailed(pDevice->CreateDescriptorHeap(&rtvDesc, IID_PPV_ARGS(&pRtvHeap)));
-
         rtvDescSize = pDevice->GetDescriptorHandleIncrementSize(rtvDesc.Type);
+    }
+
+    {
+        D3D12_DESCRIPTOR_HEAP_DESC dsvDesc = {};
+        dsvDesc.NumDescriptors = 1;
+        dsvDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        dsvDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+        ThrowIfFailed(pDevice->CreateDescriptorHeap(&dsvDesc, IID_PPV_ARGS(&pDsvHeap)));
+        dsvDescSize = pDevice->GetDescriptorHandleIncrementSize(dsvDesc.Type);
     }
 
     {
@@ -119,7 +151,6 @@ void LoadPipeline()
         srvDesc.NumDescriptors = MY_SRV_DESC_TOTAL;
         srvDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         srvDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-
         ThrowIfFailed(pDevice->CreateDescriptorHeap(&srvDesc, IID_PPV_ARGS(&pSrvHeap)));
         srvDescSize = pDevice->GetDescriptorHandleIncrementSize(srvDesc.Type);
     }
@@ -132,6 +163,21 @@ void LoadPipeline()
             pDevice->CreateRenderTargetView(pRenderTargets[i].Get(), nullptr, handle);
             handle.Offset(1, rtvDescSize);
         }
+
+        CD3DX12_HEAP_PROPERTIES dsvProps(D3D12_HEAP_TYPE_DEFAULT);
+        auto bufDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D32_FLOAT, viewport.Width, viewport.Height, 1, 0, 1, 0,
+                                                    D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
+        depthClearValue.Format = DXGI_FORMAT_D32_FLOAT;
+        depthClearValue.DepthStencil.Depth = 0.0f;
+        ThrowIfFailed(pDevice->CreateCommittedResource(&dsvProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
+                                                       D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthClearValue,
+                                                       IID_PPV_ARGS(&pDepthBuffer)));
+        D3D12_DEPTH_STENCIL_VIEW_DESC viewDesc = {};
+        viewDesc.Format = DXGI_FORMAT_D32_FLOAT;
+        viewDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+        viewDesc.Flags = D3D12_DSV_FLAG_NONE;
+        viewDesc.Texture2D.MipSlice = 0;
+        pDevice->CreateDepthStencilView(pDepthBuffer.Get(), &viewDesc, pDsvHeap->GetCPUDescriptorHandleForHeapStart());
     }
 
     ThrowIfFailed(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&pCommandAllocator)));
@@ -139,32 +185,16 @@ void LoadPipeline()
 
 void LoadAssets()
 {
+    ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, pCommandAllocator.Get(),
+                                             pPipelineState.Get(), IID_PPV_ARGS(&pCommandList)));
+    ThrowIfFailed(pCommandList->Close());
+
     {
-        std::filesystem::path basePath = GetAssetPath();
-        std::vector<BYTE> dataMS = ReadFile(basePath / L"MainMS.cso");
-        std::vector<BYTE> dataPS = ReadFile(basePath / L"MainPS.cso");
+        std::filesystem::path assetPath = GetAssetPath();
+        std::vector<BYTE> dataMS = ReadFile(assetPath / L"MainMS.cso");
+        std::vector<BYTE> dataPS = ReadFile(assetPath / L"MainPS.cso");
 
         ThrowIfFailed(pDevice->CreateRootSignature(0, dataMS.data(), dataMS.size(), IID_PPV_ARGS(&pRootSignature)));
-
-        /*
-        D3D12_INPUT_ELEMENT_DESC inputElementDesc[2];
-
-        inputElementDesc[0].SemanticName = "POSITION";
-        inputElementDesc[0].SemanticIndex = 0;
-        inputElementDesc[0].Format = DXGI_FORMAT_R32G32_FLOAT;
-        inputElementDesc[0].InputSlot = 0;
-        inputElementDesc[0].AlignedByteOffset = 0;
-        inputElementDesc[0].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-        inputElementDesc[0].InstanceDataStepRate = 0;
-
-        inputElementDesc[1].SemanticName = "COLOR";
-        inputElementDesc[1].SemanticIndex = 0;
-        inputElementDesc[1].Format = DXGI_FORMAT_R32G32B32_FLOAT;
-        inputElementDesc[1].InputSlot = 0;
-        inputElementDesc[1].AlignedByteOffset = 8;
-        inputElementDesc[1].InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-        inputElementDesc[1].InstanceDataStepRate = 0;
-        */
 
         D3DX12_MESH_SHADER_PIPELINE_STATE_DESC psoDesc = {};
         psoDesc.pRootSignature = pRootSignature.Get();
@@ -175,8 +205,9 @@ void LoadAssets()
         psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
         psoDesc.SampleMask = UINT_MAX;
         psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-        psoDesc.DepthStencilState.DepthEnable = FALSE;
-        psoDesc.DepthStencilState.StencilEnable = FALSE;
+        psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+        psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+        psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_GREATER;
         psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
         psoDesc.NumRenderTargets = 1;
         psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -195,9 +226,14 @@ void LoadAssets()
         ThrowIfFailed(pDevice->CreatePipelineState(&streamDesc, IID_PPV_ARGS(&pPipelineState)));
     }
 
-    ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, pCommandAllocator.Get(),
-                                             pPipelineState.Get(), IID_PPV_ARGS(&pCommandList)));
-    ThrowIfFailed(pCommandList->Close());
+    {
+        UINT camBufSize = sizeof(CameraCB);
+        CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_UPLOAD);
+        auto desc = CD3DX12_RESOURCE_DESC::Buffer(camBufSize);
+        ThrowIfFailed(pDevice->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &desc,
+                                                       D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+                                                       IID_PPV_ARGS(&pCameraGPU)));
+    }
 
     /*
     {
@@ -314,12 +350,14 @@ void FillCommandList()
     pCommandList->ResourceBarrier(1, &barrier);
 
     CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(pRtvHeap->GetCPUDescriptorHandleForHeapStart(), curFrame, rtvDescSize);
-    pCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
+    CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(pDsvHeap->GetCPUDescriptorHandleForHeapStart());
+    pCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
 
     constexpr float CLEAR_COLOR[] = {0.0f, 0.2f, 0.4f, 1.0f};
     pCommandList->ClearRenderTargetView(rtvHandle, CLEAR_COLOR, 0, nullptr);
-    pCommandList->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    // pCommandList->IASetVertexBuffers(0, 1, &vertexBufferView);
+    pCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 0.0f, 0, 0, nullptr);
+
+    pCommandList->SetGraphicsRootConstantBufferView(0, pCameraGPU->GetGPUVirtualAddress());
     pCommandList->DispatchMesh(1, 1, 1);
 
     ImGui::Render();
@@ -338,6 +376,17 @@ void OnRender()
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
     ImGui::ShowDemoWindow();
+
+    XMVectorSelect;
+    CameraCB.MatView = XMMatrixLookAtRH({2.0f, 2.0f, 2.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
+    CameraCB.MatProj = XMMatrixPerspectiveFovRH(45.0f, viewport.Width / (float)viewport.Height, 1000.0f, 0.001f);
+    CameraCB.MatViewProj = CameraCB.MatView * CameraCB.MatProj;
+
+    void *pCameraDataBegin;
+    CD3DX12_RANGE readRange(0, 0);
+    ThrowIfFailed(pCameraGPU->Map(0, &readRange, &pCameraDataBegin));
+    memcpy(pCameraDataBegin, &CameraCB, sizeof(CameraCB));
+    pCameraGPU->Unmap(0, nullptr);
 
     FillCommandList();
 
