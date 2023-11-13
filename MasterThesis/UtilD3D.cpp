@@ -163,6 +163,10 @@ void LoadPipeline(UINT width, UINT height)
         if (!hFenceEvent[i].Get())
             ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
     }
+
+    ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, pCommandAllocator.Get(),
+                                             nullptr, IID_PPV_ARGS(&pCommandList)));
+    ThrowIfFailed(pCommandList->Close());
 }
 
 void WaitForFrame(UINT frame)

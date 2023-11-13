@@ -19,7 +19,7 @@ PDescriptorHeap pSrvHeap;
 UINT srvDescSize;
 
 ComPtr<ID3D12RootSignature> pRootSignature;
-ComPtr<ID3D12PipelineState> pPipelineState;
+ComPtr<ID3D12PipelineState> pInitPipelineState;
 
 struct CameraData
 {
@@ -42,10 +42,6 @@ void LoadAssets()
         ThrowIfFailed(pDevice->CreateDescriptorHeap(&srvDesc, IID_PPV_ARGS(&pSrvHeap)));
         srvDescSize = pDevice->GetDescriptorHandleIncrementSize(srvDesc.Type);
     }
-
-    ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, pCommandAllocator.Get(),
-                                             pPipelineState.Get(), IID_PPV_ARGS(&pCommandList)));
-    ThrowIfFailed(pCommandList->Close());
 
     {
         std::filesystem::path assetPath = GetAssetPath();
@@ -81,7 +77,7 @@ void LoadAssets()
         streamDesc.pPipelineStateSubobjectStream = &psoStream;
         streamDesc.SizeInBytes = sizeof(psoStream);
 
-        ThrowIfFailed(pDevice->CreatePipelineState(&streamDesc, IID_PPV_ARGS(&pPipelineState)));
+        ThrowIfFailed(pDevice->CreatePipelineState(&streamDesc, IID_PPV_ARGS(&pInitPipelineState)));
     }
 
     {
@@ -127,20 +123,20 @@ std::optional<RaiiImgui> raiiImgui;
 void FillCommandList()
 {
     ThrowIfFailed(pCommandAllocator->Reset());
-    ThrowIfFailed(pCommandList->Reset(pCommandAllocator.Get(), pPipelineState.Get()));
+    ThrowIfFailed(pCommandList->Reset(pCommandAllocator.Get(), pInitPipelineState.Get()));
 
     ID3D12DescriptorHeap *heapsToSet[] = {pSrvHeap.Get()};
     pCommandList->SetDescriptorHeaps(1, heapsToSet);
 
-    D3D12_VIEWPORT viewport;
+    D3D12_VIEWPORT viewport = {};
     viewport.TopLeftX = 0.0f;
     viewport.TopLeftY = 0.0f;
-    viewport.Width = WindowWidth;
-    viewport.Height = WindowHeight;
+    viewport.Width = static_cast<float>(WindowWidth);
+    viewport.Height = static_cast<float>(WindowHeight);
     viewport.MinDepth = D3D12_MIN_DEPTH;
     viewport.MaxDepth = D3D12_MAX_DEPTH;
 
-    D3D12_RECT scissorRect;
+    D3D12_RECT scissorRect = {};
     scissorRect.left = 0;
     scissorRect.top = 0;
     scissorRect.right = WindowWidth;
@@ -187,9 +183,16 @@ void OnRender()
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
     ImGui::End();
 
-    XMVectorSelect;
-    CameraCB.MatView = XMMatrixLookAtRH({2.0f, 2.0f, 2.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
-    CameraCB.MatProj = XMMatrixPerspectiveFovRH(45.0f, WindowWidth / (float)WindowHeight, 1000.0f, 0.001f);
+    static float angle = 0.0f;
+    angle += ImGui::GetIO().DeltaTime;
+
+    float sinA = 0.0f;
+    float cosA = 0.0f;
+    XMScalarSinCos(&sinA, &cosA, angle);
+
+    float aspect = WindowWidth / static_cast<float>(WindowHeight);
+    CameraCB.MatView = XMMatrixLookAtRH({5.0f * cosA, 3.0f, 5.0f * sinA}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
+    CameraCB.MatProj = XMMatrixPerspectiveFovRH(45.0f, aspect, 1000.0f, 0.001f);
     CameraCB.MatViewProj = CameraCB.MatView * CameraCB.MatProj;
 
     void *pCameraDataBegin;
@@ -234,7 +237,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hCurInstance, _In_opt_ HINSTANCE hPrevInstanc
         }
 
         WaitForAllFrames();
-        return msg.wParam;
+        return static_cast<int>(msg.wParam);
     }
     catch (const std::runtime_error &err)
     {
