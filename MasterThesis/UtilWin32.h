@@ -6,6 +6,8 @@ extern LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 inline HINSTANCE hInstance = nullptr;
 inline HWND hWnd = nullptr;
+inline UINT WindowWidth = 0;
+inline UINT WindowHeight = 0;
 
 class RaiiMainWindow
 {

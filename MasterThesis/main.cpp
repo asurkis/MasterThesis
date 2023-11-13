@@ -4,25 +4,9 @@
 #include "UtilWin32.h"
 #include <DirectXMath.h>
 
-bool useWarpDevice = false;
-ComPtr<ID3D12Device2> pDevice;
-ComPtr<ID3D12CommandQueue> pCommandQueueDirect;
-ComPtr<IDXGISwapChain3> pSwapChain;
-ComPtr<ID3D12CommandAllocator> pCommandAllocator;
+using namespace DirectX;
 
-PResource pRenderTargets[FRAME_COUNT];
-PResource pDepthBuffer;
-D3D12_CLEAR_VALUE depthClearValue = {};
-// PResource pVertexBuffer;
-// D3D12_VERTEX_BUFFER_VIEW vertexBufferView = {};
-
-PDescriptorHeap pRtvHeap;
-UINT rtvDescSize;
-
-PDescriptorHeap pDsvHeap;
-UINT dsvDescSize;
-
-UINT curFrame = 0;
+bool useVSync = true;
 
 enum SrvDescriptors
 {
@@ -34,18 +18,8 @@ enum SrvDescriptors
 PDescriptorHeap pSrvHeap;
 UINT srvDescSize;
 
-D3D12_RECT scissorRect = {};
-CD3DX12_VIEWPORT viewport;
-
 ComPtr<ID3D12RootSignature> pRootSignature;
 ComPtr<ID3D12PipelineState> pPipelineState;
-
-ComPtr<ID3D12GraphicsCommandList6> pCommandList;
-PFence pFrameFence[FRAME_COUNT];
-UINT64 nextFenceValue[FRAME_COUNT];
-RaiiHandle hFenceEvent[FRAME_COUNT];
-
-using namespace DirectX;
 
 struct CameraData
 {
@@ -58,94 +32,8 @@ struct CameraData
 CameraData CameraCB;
 PResource pCameraGPU;
 
-void LoadPipeline()
+void LoadAssets()
 {
-#ifdef _DEBUG
-    {
-        ComPtr<ID3D12Debug> debugController;
-        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
-        {
-            debugController->EnableDebugLayer();
-            OutputDebugStringW(L"Enabled debug layer\n");
-        }
-    }
-#endif
-
-    ComPtr<IDXGIFactory4> pFactory;
-    ThrowIfFailed(CreateDXGIFactory1(IID_PPV_ARGS(&pFactory)));
-    if (useWarpDevice)
-    {
-        ComPtr<IDXGIAdapter> pAdapter;
-        ThrowIfFailed(pFactory->EnumWarpAdapter(IID_PPV_ARGS(&pAdapter)));
-        ThrowIfFailed(D3D12CreateDevice(pAdapter.Get(), NEEDED_FEATURE_LEVEL, IID_PPV_ARGS(&pDevice)));
-    }
-    else
-    {
-        ComPtr<IDXGIAdapter1> pAdapter = GetHWAdapter(pFactory);
-        ThrowIfFailed(D3D12CreateDevice(pAdapter.Get(), NEEDED_FEATURE_LEVEL, IID_PPV_ARGS(&pDevice)));
-    }
-
-    D3D12_FEATURE_DATA_SHADER_MODEL shaderModel[] = {D3D_SHADER_MODEL_6_5};
-    if (FAILED(pDevice->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, shaderModel, sizeof(shaderModel))))
-        throw std::runtime_error("Shader model 6.5 is not supported");
-
-    D3D12_COMMAND_QUEUE_DESC commandQueueDesc = {};
-    commandQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-    commandQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-    ThrowIfFailed(pDevice->CreateCommandQueue(&commandQueueDesc, IID_PPV_ARGS(&pCommandQueueDirect)));
-
-    RECT wndRect = {};
-    GetClientRect(hWnd, &wndRect);
-
-    scissorRect.left = 0;
-    scissorRect.top = 0;
-    scissorRect.right = wndRect.right - wndRect.left;
-    scissorRect.bottom = wndRect.bottom - wndRect.top;
-
-    viewport.TopLeftX = 0.0f;
-    viewport.TopLeftY = 0.0f;
-    viewport.Width = scissorRect.right;
-    viewport.Height = scissorRect.bottom;
-    viewport.MinDepth = D3D12_MIN_DEPTH;
-    viewport.MaxDepth = D3D12_MAX_DEPTH;
-
-    DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
-    swapChainDesc.BufferCount = FRAME_COUNT;
-    swapChainDesc.BufferDesc.Width = viewport.Width;
-    swapChainDesc.BufferDesc.Height = viewport.Height;
-    swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-    swapChainDesc.OutputWindow = hWnd;
-    swapChainDesc.SampleDesc.Count = 1;
-    swapChainDesc.SampleDesc.Count = 1;
-    swapChainDesc.Windowed = TRUE;
-    ComPtr<IDXGISwapChain> pSwapChain0;
-    ThrowIfFailed(pFactory->CreateSwapChain(pCommandQueueDirect.Get(), &swapChainDesc, &pSwapChain0));
-    ThrowIfFailed(pSwapChain0.As(&pSwapChain));
-
-    ThrowIfFailed(pFactory->MakeWindowAssociation(hWnd, DXGI_MWA_NO_ALT_ENTER));
-
-    curFrame = pSwapChain->GetCurrentBackBufferIndex();
-
-    {
-        D3D12_DESCRIPTOR_HEAP_DESC rtvDesc = {};
-        rtvDesc.NumDescriptors = FRAME_COUNT;
-        rtvDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-        rtvDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-        ThrowIfFailed(pDevice->CreateDescriptorHeap(&rtvDesc, IID_PPV_ARGS(&pRtvHeap)));
-        rtvDescSize = pDevice->GetDescriptorHandleIncrementSize(rtvDesc.Type);
-    }
-
-    {
-        D3D12_DESCRIPTOR_HEAP_DESC dsvDesc = {};
-        dsvDesc.NumDescriptors = 1;
-        dsvDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-        dsvDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-        ThrowIfFailed(pDevice->CreateDescriptorHeap(&dsvDesc, IID_PPV_ARGS(&pDsvHeap)));
-        dsvDescSize = pDevice->GetDescriptorHandleIncrementSize(dsvDesc.Type);
-    }
-
     {
         D3D12_DESCRIPTOR_HEAP_DESC srvDesc = {};
         srvDesc.NumDescriptors = MY_SRV_DESC_TOTAL;
@@ -155,36 +43,6 @@ void LoadPipeline()
         srvDescSize = pDevice->GetDescriptorHandleIncrementSize(srvDesc.Type);
     }
 
-    {
-        CD3DX12_CPU_DESCRIPTOR_HANDLE handle(pRtvHeap->GetCPUDescriptorHandleForHeapStart());
-        for (UINT i = 0; i < FRAME_COUNT; ++i)
-        {
-            ThrowIfFailed(pSwapChain->GetBuffer(i, IID_PPV_ARGS(&pRenderTargets[i])));
-            pDevice->CreateRenderTargetView(pRenderTargets[i].Get(), nullptr, handle);
-            handle.Offset(1, rtvDescSize);
-        }
-
-        CD3DX12_HEAP_PROPERTIES dsvProps(D3D12_HEAP_TYPE_DEFAULT);
-        auto bufDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D32_FLOAT, viewport.Width, viewport.Height, 1, 0, 1, 0,
-                                                    D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
-        depthClearValue.Format = DXGI_FORMAT_D32_FLOAT;
-        depthClearValue.DepthStencil.Depth = 0.0f;
-        ThrowIfFailed(pDevice->CreateCommittedResource(&dsvProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
-                                                       D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthClearValue,
-                                                       IID_PPV_ARGS(&pDepthBuffer)));
-        D3D12_DEPTH_STENCIL_VIEW_DESC viewDesc = {};
-        viewDesc.Format = DXGI_FORMAT_D32_FLOAT;
-        viewDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-        viewDesc.Flags = D3D12_DSV_FLAG_NONE;
-        viewDesc.Texture2D.MipSlice = 0;
-        pDevice->CreateDepthStencilView(pDepthBuffer.Get(), &viewDesc, pDsvHeap->GetCPUDescriptorHandleForHeapStart());
-    }
-
-    ThrowIfFailed(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&pCommandAllocator)));
-}
-
-void LoadAssets()
-{
     ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, pCommandAllocator.Get(),
                                              pPipelineState.Get(), IID_PPV_ARGS(&pCommandList)));
     ThrowIfFailed(pCommandList->Close());
@@ -234,46 +92,6 @@ void LoadAssets()
                                                        D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
                                                        IID_PPV_ARGS(&pCameraGPU)));
     }
-
-    /*
-    {
-        float vertices[] = {
-            0.0f, 0.0f,       // position
-            1.0f, 0.0f, 0.0f, // color
-            0.0f, 0.5f,       // position
-            0.0f, 1.0f, 0.0f, // color
-            0.5f, 0.0f,       // position
-            0.0f, 0.0f, 1.0f, // color
-        };
-        UINT vertexBufferSize = sizeof(vertices);
-
-        CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_UPLOAD);
-        auto desc = CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize);
-        ThrowIfFailed(pDevice->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &desc,
-                                                       D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
-                                                       IID_PPV_ARGS(&pVertexBuffer)));
-
-        void *pVertexDataBegin = nullptr;
-        CD3DX12_RANGE readRange(0, 0);
-        ThrowIfFailed(pVertexBuffer->Map(0, &readRange, &pVertexDataBegin));
-        memcpy(pVertexDataBegin, vertices, vertexBufferSize);
-        pVertexBuffer->Unmap(0, nullptr);
-
-        vertexBufferView.BufferLocation = pVertexBuffer->GetGPUVirtualAddress();
-        vertexBufferView.SizeInBytes = vertexBufferSize;
-        vertexBufferView.StrideInBytes = 20;
-    }
-    */
-
-    for (UINT i = 0; i < FRAME_COUNT; ++i)
-    {
-        ThrowIfFailed(pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&pFrameFence[i])));
-        nextFenceValue[i] = 1;
-
-        hFenceEvent[i] = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-        if (!hFenceEvent[i].Get())
-            ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
-    }
 }
 
 class RaiiImgui
@@ -306,33 +124,6 @@ class RaiiImgui
 
 std::optional<RaiiImgui> raiiImgui;
 
-void WaitForFrame(UINT frame)
-{
-    UINT64 value = nextFenceValue[frame]++;
-    ID3D12Fence *pFence = pFrameFence[frame].Get();
-    HANDLE hEvent = hFenceEvent->Get();
-
-    ThrowIfFailed(pCommandQueueDirect->Signal(pFence, value));
-
-    if (pFence->GetCompletedValue() < value)
-    {
-        ThrowIfFailed(pFence->SetEventOnCompletion(value, hEvent));
-        WaitForSingleObject(hEvent, INFINITE);
-    }
-}
-
-void WaitForCurFrame()
-{
-    WaitForFrame(curFrame);
-    curFrame = pSwapChain->GetCurrentBackBufferIndex();
-}
-
-void WaitForAllFrames()
-{
-    for (UINT i = 0; i < FRAME_COUNT; ++i)
-        WaitForFrame(i);
-}
-
 void FillCommandList()
 {
     ThrowIfFailed(pCommandAllocator->Reset());
@@ -340,6 +131,20 @@ void FillCommandList()
 
     ID3D12DescriptorHeap *heapsToSet[] = {pSrvHeap.Get()};
     pCommandList->SetDescriptorHeaps(1, heapsToSet);
+
+    D3D12_VIEWPORT viewport;
+    viewport.TopLeftX = 0.0f;
+    viewport.TopLeftY = 0.0f;
+    viewport.Width = WindowWidth;
+    viewport.Height = WindowHeight;
+    viewport.MinDepth = D3D12_MIN_DEPTH;
+    viewport.MaxDepth = D3D12_MAX_DEPTH;
+
+    D3D12_RECT scissorRect;
+    scissorRect.left = 0;
+    scissorRect.top = 0;
+    scissorRect.right = WindowWidth;
+    scissorRect.bottom = WindowHeight;
 
     pCommandList->SetGraphicsRootSignature(pRootSignature.Get());
     pCommandList->RSSetViewports(1, &viewport);
@@ -372,14 +177,19 @@ void FillCommandList()
 
 void OnRender()
 {
+    WaitForLastFrame();
+
     ImGui_ImplDX12_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
-    ImGui::ShowDemoWindow();
+
+    ImGui::Begin("Info");
+    ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+    ImGui::End();
 
     XMVectorSelect;
     CameraCB.MatView = XMMatrixLookAtRH({2.0f, 2.0f, 2.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
-    CameraCB.MatProj = XMMatrixPerspectiveFovRH(45.0f, viewport.Width / (float)viewport.Height, 1000.0f, 0.001f);
+    CameraCB.MatProj = XMMatrixPerspectiveFovRH(45.0f, WindowWidth / (float)WindowHeight, 1000.0f, 0.001f);
     CameraCB.MatViewProj = CameraCB.MatView * CameraCB.MatProj;
 
     void *pCameraDataBegin;
@@ -392,8 +202,10 @@ void OnRender()
 
     ID3D12CommandList *ppCommandLists[] = {pCommandList.Get()};
     pCommandQueueDirect->ExecuteCommandLists(1, ppCommandLists);
-    ThrowIfFailed(pSwapChain->Present(1, 0));
-    WaitForCurFrame();
+    if (useVSync)
+        ThrowIfFailed(pSwapChain->Present(1, 0));
+    else
+        ThrowIfFailed(pSwapChain->Present(0, DXGI_PRESENT_ALLOW_TEARING));
 }
 
 int WINAPI wWinMain(_In_ HINSTANCE hCurInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR lpCmdLine,
@@ -406,7 +218,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hCurInstance, _In_opt_ HINSTANCE hPrevInstanc
     {
         RaiiMainWindow raiiMainWindow;
 
-        LoadPipeline();
+        LoadPipeline(WindowWidth, WindowHeight);
         LoadAssets();
         raiiImgui.emplace();
         WaitForAllFrames();
@@ -415,11 +227,10 @@ int WINAPI wWinMain(_In_ HINSTANCE hCurInstance, _In_opt_ HINSTANCE hPrevInstanc
         // PostQuitMessage(0);
 
         MSG msg = {};
-        while (GetMessage(&msg, HWND_DESKTOP, 0, 0))
+        while (GetMessageW(&msg, HWND_DESKTOP, 0, 0))
         {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
-            OnRender();
         }
 
         WaitForAllFrames();
@@ -451,31 +262,25 @@ LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         case VK_ESCAPE:
             PostQuitMessage(0);
             break;
+
+        case 'V':
+            useVSync ^= true;
+            break;
+
+        default:
+            return DefWindowProc(hWnd, uMsg, wParam, lParam);
         }
         break;
 
     case WM_SIZE: {
-        UINT width = lParam & 0xFFFF;
-        UINT height = (lParam >> 16) & 0xFFFF;
-
-        scissorRect.left = 0;
-        scissorRect.top = 0;
-        scissorRect.right = width;
-        scissorRect.bottom = height;
-
-        viewport.TopLeftX = 0.0f;
-        viewport.TopLeftY = 0.0f;
-        viewport.Width = width;
-        viewport.Height = height;
-        viewport.MinDepth = D3D12_MIN_DEPTH;
-        viewport.MaxDepth = D3D12_MAX_DEPTH;
+        WindowWidth = lParam & 0xFFFF;
+        WindowHeight = (lParam >> 16) & 0xFFFF;
 
         for (UINT i = 0; i < FRAME_COUNT; ++i)
             pRenderTargets[i] = nullptr;
 
         WaitForAllFrames();
-
-        pSwapChain->ResizeBuffers(FRAME_COUNT, width, height, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
+        UpdateRenderTargetSize(WindowWidth, WindowHeight);
 
         {
             CD3DX12_CPU_DESCRIPTOR_HANDLE handle(pRtvHeap->GetCPUDescriptorHandleForHeapStart());
@@ -488,6 +293,10 @@ LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         }
 
         curFrame = pSwapChain->GetCurrentBackBufferIndex();
+        break;
+
+    case WM_PAINT:
+        OnRender();
         break;
     }
 
