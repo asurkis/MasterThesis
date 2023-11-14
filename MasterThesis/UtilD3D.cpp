@@ -21,8 +21,7 @@ ComPtr<IDXGIAdapter1> GetHWAdapter(ComPtr<IDXGIFactory1> pFactory1)
         DXGI_ADAPTER_DESC1 desc = {};
         pAdapter->GetDesc1(&desc);
 
-        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
-            continue;
+        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
 
         if (SUCCEEDED(D3D12CreateDevice(pAdapter.Get(), NEEDED_FEATURE_LEVEL, _uuidof(ID3D12Device), nullptr)))
             return pAdapter;
@@ -31,14 +30,12 @@ ComPtr<IDXGIAdapter1> GetHWAdapter(ComPtr<IDXGIFactory1> pFactory1)
     for (UINT i = 0;; ++i)
     {
         ComPtr<IDXGIAdapter1> pAdapter = nullptr;
-        if (FAILED(pFactory->EnumAdapters1(i, &pAdapter)))
-            break;
+        if (FAILED(pFactory->EnumAdapters1(i, &pAdapter))) break;
 
         DXGI_ADAPTER_DESC1 desc = {};
         pAdapter->GetDesc1(&desc);
 
-        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
-            continue;
+        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
 
         if (SUCCEEDED(D3D12CreateDevice(pAdapter.Get(), NEEDED_FEATURE_LEVEL, _uuidof(ID3D12Device), nullptr)))
             return pAdapter;
@@ -169,8 +166,7 @@ void LoadPipeline(UINT width, UINT height)
         nextFenceValue[i] = 1;
 
         hFenceEvent[i] = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-        if (!hFenceEvent[i].Get())
-            ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
+        if (!hFenceEvent[i].Get()) ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
     }
 
     ThrowIfFailed(pDevice->CreateCommandList(0,
