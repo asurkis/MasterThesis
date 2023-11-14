@@ -2,8 +2,8 @@
 
 bool useWarpDevice = false;
 
-inline PFence pFrameFence[FRAME_COUNT];
-inline UINT64 nextFenceValue[FRAME_COUNT];
+inline PFence     pFrameFence[FRAME_COUNT];
+inline UINT64     nextFenceValue[FRAME_COUNT];
 inline RaiiHandle hFenceEvent[FRAME_COUNT];
 
 ComPtr<IDXGIAdapter1> GetHWAdapter(ComPtr<IDXGIFactory1> pFactory1)
@@ -50,19 +50,28 @@ ComPtr<IDXGIAdapter1> GetHWAdapter(ComPtr<IDXGIFactory1> pFactory1)
 void CreateDepthBuffer(UINT width, UINT height)
 {
     CD3DX12_HEAP_PROPERTIES dsvProps(D3D12_HEAP_TYPE_DEFAULT);
-    auto desc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D32_FLOAT, width, height, 1, 0, 1, 0,
+    auto                    desc       = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D32_FLOAT,
+                                             width,
+                                             height,
+                                             1,
+                                             0,
+                                             1,
+                                             0,
                                              D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
-    D3D12_CLEAR_VALUE clearValue = {};
-    clearValue.Format = DXGI_FORMAT_D32_FLOAT;
-    clearValue.DepthStencil.Depth = 0.0f;
-    ThrowIfFailed(pDevice->CreateCommittedResource(&dsvProps, D3D12_HEAP_FLAG_NONE, &desc,
-                                                   D3D12_RESOURCE_STATE_DEPTH_WRITE, &clearValue,
+    D3D12_CLEAR_VALUE       clearValue = {};
+    clearValue.Format                  = DXGI_FORMAT_D32_FLOAT;
+    clearValue.DepthStencil.Depth      = 0.0f;
+    ThrowIfFailed(pDevice->CreateCommittedResource(&dsvProps,
+                                                   D3D12_HEAP_FLAG_NONE,
+                                                   &desc,
+                                                   D3D12_RESOURCE_STATE_DEPTH_WRITE,
+                                                   &clearValue,
                                                    IID_PPV_ARGS(&pDepthBuffer)));
     D3D12_DEPTH_STENCIL_VIEW_DESC viewDesc = {};
-    viewDesc.Format = DXGI_FORMAT_D32_FLOAT;
-    viewDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-    viewDesc.Flags = D3D12_DSV_FLAG_NONE;
-    viewDesc.Texture2D.MipSlice = 0;
+    viewDesc.Format                        = DXGI_FORMAT_D32_FLOAT;
+    viewDesc.ViewDimension                 = D3D12_DSV_DIMENSION_TEXTURE2D;
+    viewDesc.Flags                         = D3D12_DSV_FLAG_NONE;
+    viewDesc.Texture2D.MipSlice            = 0;
     pDevice->CreateDepthStencilView(pDepthBuffer.Get(), &viewDesc, pDsvHeap->GetCPUDescriptorHandleForHeapStart());
 }
 
@@ -98,22 +107,22 @@ void LoadPipeline(UINT width, UINT height)
         throw std::runtime_error("Shader model 6.5 is not supported");
 
     D3D12_COMMAND_QUEUE_DESC commandQueueDesc = {};
-    commandQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-    commandQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+    commandQueueDesc.Flags                    = D3D12_COMMAND_QUEUE_FLAG_NONE;
+    commandQueueDesc.Type                     = D3D12_COMMAND_LIST_TYPE_DIRECT;
     ThrowIfFailed(pDevice->CreateCommandQueue(&commandQueueDesc, IID_PPV_ARGS(&pCommandQueueDirect)));
 
     DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
-    swapChainDesc.BufferCount = FRAME_COUNT;
-    swapChainDesc.BufferDesc.Width = width;
-    swapChainDesc.BufferDesc.Height = height;
-    swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-    swapChainDesc.OutputWindow = hWnd;
-    swapChainDesc.SampleDesc.Count = 1;
-    swapChainDesc.SampleDesc.Count = 1;
-    swapChainDesc.Windowed = TRUE;
-    swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+    swapChainDesc.BufferCount          = FRAME_COUNT;
+    swapChainDesc.BufferDesc.Width     = width;
+    swapChainDesc.BufferDesc.Height    = height;
+    swapChainDesc.BufferDesc.Format    = DXGI_FORMAT_R8G8B8A8_UNORM;
+    swapChainDesc.BufferUsage          = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    swapChainDesc.SwapEffect           = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    swapChainDesc.OutputWindow         = hWnd;
+    swapChainDesc.SampleDesc.Count     = 1;
+    swapChainDesc.SampleDesc.Count     = 1;
+    swapChainDesc.Windowed             = TRUE;
+    swapChainDesc.Flags                = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
     ComPtr<IDXGISwapChain> pSwapChain0;
     ThrowIfFailed(pFactory->CreateSwapChain(pCommandQueueDirect.Get(), &swapChainDesc, &pSwapChain0));
     ThrowIfFailed(pSwapChain0.As(&pSwapChain));
@@ -124,18 +133,18 @@ void LoadPipeline(UINT width, UINT height)
 
     {
         D3D12_DESCRIPTOR_HEAP_DESC rtvDesc = {};
-        rtvDesc.NumDescriptors = FRAME_COUNT;
-        rtvDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-        rtvDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+        rtvDesc.NumDescriptors             = FRAME_COUNT;
+        rtvDesc.Flags                      = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        rtvDesc.Type                       = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
         ThrowIfFailed(pDevice->CreateDescriptorHeap(&rtvDesc, IID_PPV_ARGS(&pRtvHeap)));
         rtvDescSize = pDevice->GetDescriptorHandleIncrementSize(rtvDesc.Type);
     }
 
     {
         D3D12_DESCRIPTOR_HEAP_DESC dsvDesc = {};
-        dsvDesc.NumDescriptors = 1;
-        dsvDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-        dsvDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+        dsvDesc.NumDescriptors             = 1;
+        dsvDesc.Flags                      = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        dsvDesc.Type                       = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
         ThrowIfFailed(pDevice->CreateDescriptorHeap(&dsvDesc, IID_PPV_ARGS(&pDsvHeap)));
         dsvDescSize = pDevice->GetDescriptorHandleIncrementSize(dsvDesc.Type);
     }
@@ -164,16 +173,19 @@ void LoadPipeline(UINT width, UINT height)
             ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
     }
 
-    ThrowIfFailed(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, pCommandAllocator.Get(),
-                                             nullptr, IID_PPV_ARGS(&pCommandList)));
+    ThrowIfFailed(pDevice->CreateCommandList(0,
+                                             D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                             pCommandAllocator.Get(),
+                                             nullptr,
+                                             IID_PPV_ARGS(&pCommandList)));
     ThrowIfFailed(pCommandList->Close());
 }
 
 void WaitForFrame(UINT frame)
 {
-    UINT64 value = nextFenceValue[frame]++;
+    UINT64       value  = nextFenceValue[frame]++;
     ID3D12Fence *pFence = pFrameFence[frame].Get();
-    HANDLE hEvent = hFenceEvent->Get();
+    HANDLE       hEvent = hFenceEvent->Get();
 
     ThrowIfFailed(pCommandQueueDirect->Signal(pFence, value));
 
@@ -204,14 +216,14 @@ void WaitForAllFrames()
 
 void UpdateRenderTargetSize(UINT width, UINT height)
 {
-    width = max(1, width);
+    width  = max(1, width);
     height = max(1, height);
-    ThrowIfFailed(pSwapChain->ResizeBuffers(FRAME_COUNT, width, height, DXGI_FORMAT_R8G8B8A8_UNORM,
+    ThrowIfFailed(pSwapChain->ResizeBuffers(FRAME_COUNT,
+                                            width,
+                                            height,
+                                            DXGI_FORMAT_R8G8B8A8_UNORM,
                                             DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING));
     CreateDepthBuffer(width, height);
 }
 
-PResource GetCurRenderTarget()
-{
-    return pRenderTargets[curFrame];
-}
+PResource GetCurRenderTarget() { return pRenderTargets[curFrame]; }

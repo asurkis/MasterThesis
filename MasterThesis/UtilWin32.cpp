@@ -1,7 +1,7 @@
 #include "UtilWin32.h"
 
 static LPCWSTR WINDOW_CLASS_NAME = L"WindowClass1";
-static bool isInit = false;
+static bool    isInit            = false;
 
 RaiiMainWindow::RaiiMainWindow()
 {
@@ -9,16 +9,25 @@ RaiiMainWindow::RaiiMainWindow()
         throw std::runtime_error("Initializing main window twice");
     isInit = true;
 
-    WNDCLASSEXW wc = {};
-    wc.cbSize = sizeof(WNDCLASSEX);
-    wc.style = CS_HREDRAW | CS_VREDRAW;
+    WNDCLASSEXW wc   = {};
+    wc.cbSize        = sizeof(WNDCLASSEX);
+    wc.style         = CS_HREDRAW | CS_VREDRAW;
     wc.lpszClassName = WINDOW_CLASS_NAME;
-    wc.lpfnWndProc = WndProc;
+    wc.lpfnWndProc   = WndProc;
     if (!RegisterClassExW(&wc))
         throw std::runtime_error("Could not register window class");
 
-    hWnd = CreateWindowExW(0, WINDOW_CLASS_NAME, L"Window1", WS_OVERLAPPEDWINDOW,
-                           CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, HWND_DESKTOP, nullptr, hInstance,
+    hWnd = CreateWindowExW(0,
+                           WINDOW_CLASS_NAME,
+                           L"Window1",
+                           WS_OVERLAPPEDWINDOW,
+                           CW_USEDEFAULT,
+                           CW_USEDEFAULT,
+                           CW_USEDEFAULT,
+                           CW_USEDEFAULT,
+                           HWND_DESKTOP,
+                           nullptr,
+                           hInstance,
                            nullptr);
 
     if (!hWnd)
@@ -26,7 +35,7 @@ RaiiMainWindow::RaiiMainWindow()
 
     RECT rect = {};
     GetClientRect(hWnd, &rect);
-    WindowWidth = rect.right - rect.left;
+    WindowWidth  = rect.right - rect.left;
     WindowHeight = rect.bottom - rect.top;
 }
 
@@ -36,22 +45,13 @@ RaiiMainWindow::~RaiiMainWindow()
     UnregisterClassW(WINDOW_CLASS_NAME, hInstance);
 }
 
-RaiiHandle::RaiiHandle() noexcept
-{
-}
+RaiiHandle::RaiiHandle() noexcept {}
 
-RaiiHandle::RaiiHandle(HANDLE handle) : hSelf(handle)
-{
-}
+RaiiHandle::RaiiHandle(HANDLE handle) : hSelf(handle) {}
 
-RaiiHandle::~RaiiHandle()
-{
-    Clear();
-}
+RaiiHandle::~RaiiHandle() { Clear(); }
 
-RaiiHandle::RaiiHandle(RaiiHandle &&rhs) noexcept : hSelf(rhs.Release())
-{
-}
+RaiiHandle::RaiiHandle(RaiiHandle &&rhs) noexcept : hSelf(rhs.Release()) {}
 
 RaiiHandle &RaiiHandle::operator=(RaiiHandle &&rhs) noexcept
 {
@@ -60,15 +60,12 @@ RaiiHandle &RaiiHandle::operator=(RaiiHandle &&rhs) noexcept
     return *this;
 }
 
-HANDLE RaiiHandle::Get() const noexcept
-{
-    return hSelf;
-}
+HANDLE RaiiHandle::Get() const noexcept { return hSelf; }
 
 HANDLE RaiiHandle::Release() noexcept
 {
     HANDLE h = hSelf;
-    hSelf = nullptr;
+    hSelf    = nullptr;
     return h;
 }
 
@@ -97,7 +94,7 @@ std::vector<unsigned char> ReadFile(const std::filesystem::path &path)
 std::filesystem::path GetAssetPath()
 {
     constexpr size_t BUFLEN = 1024;
-    WCHAR buf[BUFLEN];
+    WCHAR            buf[BUFLEN];
     GetModuleFileNameW(nullptr, buf, BUFLEN);
     std::filesystem::path path(buf);
     path.remove_filename();

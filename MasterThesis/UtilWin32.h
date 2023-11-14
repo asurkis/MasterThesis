@@ -4,15 +4,15 @@
 
 extern LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
-inline HINSTANCE hInstance = nullptr;
-inline HWND hWnd = nullptr;
-inline UINT WindowWidth = 0;
-inline UINT WindowHeight = 0;
+inline HINSTANCE hInstance    = nullptr;
+inline HWND      hWnd         = nullptr;
+inline UINT      WindowWidth  = 0;
+inline UINT      WindowHeight = 0;
 
 class RaiiMainWindow
 {
   public:
-    RaiiMainWindow(const RaiiMainWindow &) = delete;
+    RaiiMainWindow(const RaiiMainWindow &)            = delete;
     RaiiMainWindow &operator=(const RaiiMainWindow &) = delete;
 
     explicit RaiiMainWindow();
@@ -24,7 +24,7 @@ class RaiiHandle
     HANDLE hSelf = nullptr;
 
   public:
-    RaiiHandle(const RaiiHandle &) = delete;
+    RaiiHandle(const RaiiHandle &)            = delete;
     RaiiHandle &operator=(const RaiiHandle &) = delete;
 
     RaiiHandle() noexcept;
@@ -41,4 +41,4 @@ class RaiiHandle
 };
 
 std::vector<unsigned char> ReadFile(const std::filesystem::path &path);
-std::filesystem::path GetAssetPath();
+std::filesystem::path      GetAssetPath();
