@@ -28,6 +28,8 @@ using PBlob = ComPtr<ID3DBlob>;
 using PDescriptorHeap = ComPtr<ID3D12DescriptorHeap>;
 using PFence = ComPtr<ID3D12Fence>;
 using PResource = ComPtr<ID3D12Resource>;
+using PRootSignature = ComPtr<ID3D12RootSignature>;
+using PPipelineState = ComPtr<ID3D12PipelineState>;
 
 inline void ThrowIfFailedFn_(HRESULT hr, std::string_view file, int line)
 {

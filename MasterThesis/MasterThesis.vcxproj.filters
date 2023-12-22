@@ -58,6 +58,12 @@
     <FxCompile Include="MainMS.hlsl">
       <Filter>Файлы ресурсов</Filter>
     </FxCompile>
+    <FxCompile Include="AABB_MS.hlsl">
+      <Filter>Файлы ресурсов</Filter>
+    </FxCompile>
+    <FxCompile Include="AABB_PS.hlsl">
+      <Filter>Файлы ресурсов</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <CopyFileToFolders Include="Dragon_LOD0.bin">
