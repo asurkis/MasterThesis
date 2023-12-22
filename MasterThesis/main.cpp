@@ -38,6 +38,9 @@ float    camRotX  = XMConvertToRadians(0.0f);
 float    camRotY  = XMConvertToRadians(135.0f);
 float    camSpeed = 50.0f;
 
+bool drawModel       = true;
+bool drawMeshletAABB = false;
+
 CameraData CameraCB;
 PResource  pCameraGPU;
 
@@ -222,12 +225,12 @@ void FillCommandList()
 
     pCommandList->SetGraphicsRootSignature(pMainRootSignature.Get());
     pCommandList->SetGraphicsRootConstantBufferView(0, pCameraGPU->GetGPUVirtualAddress());
-    RenderModel();
+    if (drawModel) RenderModel();
 
     pCommandList->SetPipelineState(pAabbPipelineState.Get());
-    //pCommandList->SetGraphicsRootSignature(pMainRootSignature.Get());
-    //pCommandList->SetGraphicsRootConstantBufferView(0, pCameraGPU->GetGPUVirtualAddress());
-    RenderModel();
+    // pCommandList->SetGraphicsRootSignature(pMainRootSignature.Get());
+    // pCommandList->SetGraphicsRootConstantBufferView(0, pCameraGPU->GetGPUVirtualAddress());
+    if (drawMeshletAABB) RenderModel();
 
     ImGui::Render();
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCommandList.Get());
@@ -260,6 +263,8 @@ void OnRender()
         ImGui::Text("Rotation X: %.1f deg", XMConvertToDegrees(camRotX));
         ImGui::Text("Rotation Y: %.1f deg", XMConvertToDegrees(camRotY));
     }
+    ImGui::Checkbox("Draw model", &drawModel);
+    ImGui::Checkbox("Draw meshlet AABB", &drawMeshletAABB);
     ImGui::End();
 
     float aspect    = WindowWidth / static_cast<float>(WindowHeight);
