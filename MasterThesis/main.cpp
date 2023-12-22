@@ -30,7 +30,7 @@ struct CameraData
     XMMATRIX MatView;
     XMMATRIX MatProj;
     XMMATRIX MatViewProj;
-    XMMATRIX MatNormalViewProj;
+    XMMATRIX MatNormal;
 };
 
 XMVECTOR camPos   = XMVectorSet(-100.0f, 80.0f, 150.0f, 0.0f);
@@ -329,6 +329,7 @@ void OnRender()
     CameraCB.MatView     = XMMatrixTranspose(matTrans * matRot);
     CameraCB.MatProj     = XMMatrixTranspose(XMMatrixPerspectiveFovRH(45.0f, aspect, 1000.0f, 0.001f));
     CameraCB.MatViewProj = CameraCB.MatProj * CameraCB.MatView;
+    CameraCB.MatNormal   = XMMatrixTranspose(XMMatrixInverse(nullptr, CameraCB.MatView));
 
     void *        pCameraDataBegin;
     CD3DX12_RANGE readRange(0, 0);

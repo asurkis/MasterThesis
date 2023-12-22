@@ -3,7 +3,7 @@ struct CameraData
     float4x4 MatView;
     float4x4 MatProj;
     float4x4 MatViewProj;
-    float4x4 MatNormalViewProj;
+    float4x4 MatNormal;
 };
 
 struct MeshInfoData
@@ -81,11 +81,11 @@ VertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
     Vertex v = Vertices[vertexIndex];
 
     VertexOut vout;
-    vout.PositionVS = mul(float4(v.Position, 1), Camera.MatView).xyz;
-    vout.PositionHS = mul(float4(v.Position, 1), Camera.MatViewProj);
-    // vout.Normal = mul(float4(v.Normal, 0), Globals.World).xyz;
-    vout.Normal       = v.Normal;
+    vout.PositionVS   = mul(float4(v.Position, 1), Camera.MatView).xyz;
+    vout.PositionHS   = mul(float4(v.Position, 1), Camera.MatViewProj);
+    vout.Normal       = mul(float4(v.Normal, 0), Camera.MatNormal).xyz;
     vout.MeshletIndex = meshletIndex;
+    // vout.Normal       = v.Normal;
 
     return vout;
 }
