@@ -219,7 +219,7 @@ void FillCommandList()
     CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(pDsvHeap->GetCPUDescriptorHandleForHeapStart());
     pCommandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
 
-    constexpr float CLEAR_COLOR[] = {0.0f, 0.2f, 0.4f, 1.0f};
+    constexpr float CLEAR_COLOR[] = {1.0f, 0.75f, 0.5f, 1.0f};
     pCommandList->ClearRenderTargetView(rtvHandle, CLEAR_COLOR, 0, nullptr);
     pCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 0.0f, 0, 0, nullptr);
 
