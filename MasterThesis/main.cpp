@@ -1,4 +1,4 @@
-#include "common.h"
+#include "stdafx.h"
 
 #include "Model.h"
 #include "UtilD3D.h"
@@ -30,10 +30,10 @@ struct CameraData
     XMMATRIX MatNormalViewProj;
 };
 
-XMVECTOR camPos        = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
-float    camRotX       = 0.0f;
-float    camRotY       = 0.0f;
-float    movementSpeed = 1.0f;
+XMVECTOR camPos   = XMVectorSet(-100.0f, 80.0f, 150.0f, 0.0f);
+float    camRotX  = XMConvertToRadians(0.0f);
+float    camRotY  = XMConvertToRadians(135.0f);
+float    camSpeed = 50.0f;
 
 CameraData CameraCB;
 PResource  pCameraGPU;
@@ -228,7 +228,15 @@ void OnRender()
 
     ImGui::Begin("Info");
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-    ImGui::DragFloat("Movement speed", &movementSpeed);
+    if (ImGui::CollapsingHeader("Camera"))
+    {
+        ImGui::SliderFloat("Movement speed", &camSpeed, 1.0f, 256.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+        ImGui::Text("Position X: %.3f", XMVectorGetX(camPos));
+        ImGui::Text("Position Y: %.3f", XMVectorGetY(camPos));
+        ImGui::Text("Position Z: %.3f", XMVectorGetZ(camPos));
+        ImGui::Text("Rotation X: %.1f deg", XMConvertToDegrees(camRotX));
+        ImGui::Text("Rotation Y: %.1f deg", XMConvertToDegrees(camRotY));
+    }
     ImGui::End();
 
     float aspect    = WindowWidth / static_cast<float>(WindowHeight);
@@ -240,6 +248,9 @@ void OnRender()
         ImGui::ResetMouseDragDelta();
         camRotX += mouseDelta.y / static_cast<float>(WindowHeight);
         camRotY += mouseDelta.x / static_cast<float>(WindowHeight);
+        camRotX = std::clamp(camRotX, -XM_PIDIV2, XM_PIDIV2);
+        while (camRotY < -XM_PI) camRotY += XM_2PI;
+        while (camRotY > XM_PI) camRotY -= XM_2PI;
     }
 
     float camRotXSin = 0.0f;
@@ -255,12 +266,12 @@ void OnRender()
 
     if (!ImGui::GetIO().WantCaptureKeyboard)
     {
-        if (ImGui::IsKeyDown(ImGuiKey_W)) camPos += movementSpeed * deltaTime * vecForward;
-        if (ImGui::IsKeyDown(ImGuiKey_S)) camPos -= movementSpeed * deltaTime * vecForward;
-        if (ImGui::IsKeyDown(ImGuiKey_D)) camPos += movementSpeed * deltaTime * vecRight;
-        if (ImGui::IsKeyDown(ImGuiKey_A)) camPos -= movementSpeed * deltaTime * vecRight;
-        if (ImGui::IsKeyDown(ImGuiKey_E)) camPos += movementSpeed * deltaTime * vecUpGlobal;
-        if (ImGui::IsKeyDown(ImGuiKey_Q)) camPos -= movementSpeed * deltaTime * vecUpGlobal;
+        if (ImGui::IsKeyDown(ImGuiKey_W)) camPos += camSpeed * deltaTime * vecForward;
+        if (ImGui::IsKeyDown(ImGuiKey_S)) camPos -= camSpeed * deltaTime * vecForward;
+        if (ImGui::IsKeyDown(ImGuiKey_D)) camPos += camSpeed * deltaTime * vecRight;
+        if (ImGui::IsKeyDown(ImGuiKey_A)) camPos -= camSpeed * deltaTime * vecRight;
+        if (ImGui::IsKeyDown(ImGuiKey_E)) camPos += camSpeed * deltaTime * vecUpGlobal;
+        if (ImGui::IsKeyDown(ImGuiKey_Q)) camPos -= camSpeed * deltaTime * vecUpGlobal;
     }
 
     XMVECTOR vecUp = XMVector3Cross(vecRight, vecForward);
@@ -291,7 +302,7 @@ void OnRender()
     CameraCB.MatProj     = XMMatrixTranspose(XMMatrixPerspectiveFovRH(45.0f, aspect, 1000.0f, 0.001f));
     CameraCB.MatViewProj = CameraCB.MatProj * CameraCB.MatView;
 
-    void         *pCameraDataBegin;
+    void *        pCameraDataBegin;
     CD3DX12_RANGE readRange(0, 0);
     ThrowIfFailed(pCameraGPU->Map(0, &readRange, &pCameraDataBegin));
     memcpy(pCameraDataBegin, &CameraCB, sizeof(CameraCB));
@@ -367,8 +378,7 @@ LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         WindowWidth  = lParam & 0xFFFF;
         WindowHeight = (lParam >> 16) & 0xFFFF;
 
-        for (UINT i = 0; i < FRAME_COUNT; ++i)
-            pRenderTargets[i] = nullptr;
+        for (UINT i = 0; i < FRAME_COUNT; ++i) pRenderTargets[i] = nullptr;
 
         WaitForAllFrames();
         UpdateRenderTargetSize(WindowWidth, WindowHeight);

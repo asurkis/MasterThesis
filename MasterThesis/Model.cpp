@@ -8,7 +8,7 @@
 // PURPOSE, MERCHANTABILITY, OR NON-INFRINGEMENT.
 //
 //*********************************************************
-#include "common.h"
+#include "stdafx.h"
 #include "Model.h"
 
 #include "DXSampleHelper.h"

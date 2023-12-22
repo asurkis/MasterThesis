@@ -1,10 +1,10 @@
 BasedOnStyle: Microsoft
 # AttributeMacros: []
-AlignArrayOfStructures: Left
+# AlignArrayOfStructures: Left
 
-AlignConsecutiveAssignments: Consecutive
-AlignConsecutiveBitFields: Consecutive
-AlignConsecutiveDeclarations: Consecutive
+AlignConsecutiveAssignments: true
+AlignConsecutiveBitFields: true
+AlignConsecutiveDeclarations: true
 
 AllowAllArgumentsOnNextLine: false
 BinPackArguments: false
@@ -17,3 +17,4 @@ AllowShortBlocksOnASingleLine: true
 AllowShortCaseLabelsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: true
 AllowShortIfStatementsOnASingleLine: true
+AllowShortLoopsOnASingleLine: true

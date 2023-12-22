@@ -1,3 +1,4 @@
+#include "stdafx.h"
 #include "UtilD3D.h"
 
 bool useWarpDevice = false;

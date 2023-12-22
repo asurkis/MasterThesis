@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common.h"
+#include "stdafx.h"
 
 extern LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
