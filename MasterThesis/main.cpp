@@ -314,7 +314,6 @@ int WINAPI wWinMain(_In_ HINSTANCE     hCurInstance,
         WaitForAllFrames();
 
         ShowWindow(hWnd, nShowCmd);
-        // PostQuitMessage(0);
 
         MSG msg = {};
         while (GetMessageW(&msg, HWND_DESKTOP, 0, 0))
@@ -373,9 +372,9 @@ LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
         curFrame = pSwapChain->GetCurrentBackBufferIndex();
         break;
+    }
 
     case WM_PAINT: OnRender(); break;
-    }
 
     default: return DefWindowProc(hWnd, uMsg, wParam, lParam);
     }

@@ -105,6 +105,13 @@ void LoadPipeline(UINT width, UINT height)
     if (FAILED(pDevice->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, shaderModel, sizeof(shaderModel))))
         throw std::runtime_error("Shader model 6.5 is not supported");
 
+    D3D12_FEATURE_DATA_D3D12_OPTIONS7 features = {};
+    if (FAILED(pDevice->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &features, sizeof(features))))
+        throw std::runtime_error("Feature level 7 is not supported");
+
+    if (features.MeshShaderTier == D3D12_MESH_SHADER_TIER_NOT_SUPPORTED)
+        throw std::runtime_error("Mesh shaders not supported");
+
     D3D12_COMMAND_QUEUE_DESC commandQueueDesc = {};
     commandQueueDesc.Flags                    = D3D12_COMMAND_QUEUE_FLAG_NONE;
     commandQueueDesc.Type                     = D3D12_COMMAND_LIST_TYPE_DIRECT;
