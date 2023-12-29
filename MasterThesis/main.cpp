@@ -19,11 +19,8 @@ enum SrvDescriptors
 PDescriptorHeap pSrvHeap;
 UINT            srvDescSize;
 
-PRootSignature pMainRootSignature;
-PPipelineState pMainPipelineState;
-
-PRootSignature pAabbRootSignature;
-PPipelineState pAabbPipelineState;
+MeshPipeline mainPipeline;
+MeshPipeline aabbPipeline;
 
 struct CameraData
 {
@@ -46,52 +43,6 @@ PResource  pCameraGPU;
 
 Model model;
 
-void LoadMeshPipeline(PPipelineState *             ppPipelineState,
-                      PRootSignature *             ppRootSignature,
-                      const std::filesystem::path &pathMS,
-                      const std::filesystem::path &pathPS)
-{
-    PPipelineState pPipelineState;
-    PRootSignature pRootSignature;
-
-    std::vector<BYTE> dataMS = ReadFile(pathMS);
-    std::vector<BYTE> dataPS = ReadFile(pathPS);
-
-    ThrowIfFailed(pDevice->CreateRootSignature(0, dataMS.data(), dataMS.size(), IID_PPV_ARGS(&pRootSignature)));
-
-    D3DX12_MESH_SHADER_PIPELINE_STATE_DESC psoDesc = {};
-    psoDesc.pRootSignature                         = pRootSignature.Get();
-    psoDesc.MS.pShaderBytecode                     = dataMS.data();
-    psoDesc.MS.BytecodeLength                      = dataMS.size();
-    psoDesc.PS.pShaderBytecode                     = dataPS.data();
-    psoDesc.PS.BytecodeLength                      = dataPS.size();
-    psoDesc.BlendState                             = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-    psoDesc.SampleMask                             = UINT_MAX;
-    psoDesc.RasterizerState                        = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-    psoDesc.RasterizerState.CullMode               = D3D12_CULL_MODE_NONE;
-    psoDesc.DepthStencilState                      = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-    psoDesc.DepthStencilState.DepthFunc            = D3D12_COMPARISON_FUNC_GREATER;
-    psoDesc.PrimitiveTopologyType                  = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-    psoDesc.NumRenderTargets                       = 1;
-    psoDesc.RTVFormats[0]                          = DXGI_FORMAT_R8G8B8A8_UNORM;
-    psoDesc.DSVFormat                              = DXGI_FORMAT_R32_FLOAT;
-    psoDesc.SampleDesc.Count                       = 1;
-    psoDesc.SampleDesc.Quality                     = 0;
-    psoDesc.CachedPSO                              = {};
-    psoDesc.Flags                                  = D3D12_PIPELINE_STATE_FLAG_NONE;
-
-    CD3DX12_PIPELINE_MESH_STATE_STREAM psoStream(psoDesc);
-
-    D3D12_PIPELINE_STATE_STREAM_DESC streamDesc = {};
-    streamDesc.pPipelineStateSubobjectStream    = &psoStream;
-    streamDesc.SizeInBytes                      = sizeof(psoStream);
-
-    ThrowIfFailed(pDevice->CreatePipelineState(&streamDesc, IID_PPV_ARGS(&pPipelineState)));
-
-    *ppPipelineState = std::move(pPipelineState);
-    *ppRootSignature = std::move(pRootSignature);
-}
-
 void LoadAssets()
 {
     std::filesystem::path assetPath = GetAssetPath();
@@ -105,8 +56,8 @@ void LoadAssets()
         srvDescSize = pDevice->GetDescriptorHandleIncrementSize(srvDesc.Type);
     }
 
-    LoadMeshPipeline(&pMainPipelineState, &pMainRootSignature, assetPath / L"MainMS.cso", assetPath / L"MainPS.cso");
-    LoadMeshPipeline(&pAabbPipelineState, &pAabbRootSignature, assetPath / L"AABB_MS.cso", assetPath / L"AABB_PS.cso");
+    mainPipeline.Load(assetPath / L"MainMS.cso", assetPath / L"MainPS.cso");
+    aabbPipeline.Load(assetPath / L"AABB_MS.cso", assetPath / L"AABB_PS.cso");
 
     {
         UINT                    camBufSize = sizeof(CameraCB);
@@ -188,7 +139,7 @@ void RenderModel()
 void FillCommandList()
 {
     ThrowIfFailed(pCommandAllocator->Reset());
-    ThrowIfFailed(pCommandList->Reset(pCommandAllocator.Get(), pMainPipelineState.Get()));
+    ThrowIfFailed(pCommandList->Reset(pCommandAllocator.Get(), mainPipeline.GetStateRaw()));
 
     ID3D12DescriptorHeap *heapsToSet[] = {pSrvHeap.Get()};
     pCommandList->SetDescriptorHeaps(1, heapsToSet);
@@ -223,13 +174,11 @@ void FillCommandList()
     pCommandList->ClearRenderTargetView(rtvHandle, CLEAR_COLOR, 0, nullptr);
     pCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 0.0f, 0, 0, nullptr);
 
-    pCommandList->SetGraphicsRootSignature(pMainRootSignature.Get());
+    pCommandList->SetGraphicsRootSignature(mainPipeline.GetRootSignatureRaw());
     pCommandList->SetGraphicsRootConstantBufferView(0, pCameraGPU->GetGPUVirtualAddress());
     if (drawModel) RenderModel();
 
-    pCommandList->SetPipelineState(pAabbPipelineState.Get());
-    // pCommandList->SetGraphicsRootSignature(pMainRootSignature.Get());
-    // pCommandList->SetGraphicsRootConstantBufferView(0, pCameraGPU->GetGPUVirtualAddress());
+    pCommandList->SetPipelineState(aabbPipeline.GetStateRaw());
     if (drawMeshletAABB) RenderModel();
 
     ImGui::Render();

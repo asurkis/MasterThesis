@@ -27,3 +27,15 @@ inline UINT            dsvDescSize;
 inline PResource pRenderTargets[FRAME_COUNT];
 inline PResource pDepthBuffer;
 inline UINT      curFrame = 0;
+
+class MeshPipeline
+{
+    PPipelineState pPipelineState;
+    PRootSignature pRootSignature;
+
+  public:
+    void Load(const std::filesystem::path &pathMS, const std::filesystem::path &pathPS);
+
+    ID3D12PipelineState *GetStateRaw() const noexcept { return pPipelineState.Get(); }
+    ID3D12RootSignature *GetRootSignatureRaw() const noexcept { return pRootSignature.Get(); }
+};
