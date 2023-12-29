@@ -13,6 +13,12 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Файлы ресурсов\Шейдеры">
+      <UniqueIdentifier>{2c259b80-0b11-4d41-9573-41c981e6fa37}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Файлы ресурсов\Модели">
+      <UniqueIdentifier>{d684980a-0c74-4361-bd18-ff88711cfeee}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -52,22 +58,37 @@
     <None Include=".clang-format" />
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="MainPS.hlsl">
-      <Filter>Файлы ресурсов</Filter>
-    </FxCompile>
-    <FxCompile Include="MainMS.hlsl">
-      <Filter>Файлы ресурсов</Filter>
-    </FxCompile>
     <FxCompile Include="AABB_MS.hlsl">
-      <Filter>Файлы ресурсов</Filter>
+      <Filter>Файлы ресурсов\Шейдеры</Filter>
     </FxCompile>
     <FxCompile Include="AABB_PS.hlsl">
-      <Filter>Файлы ресурсов</Filter>
+      <Filter>Файлы ресурсов\Шейдеры</Filter>
+    </FxCompile>
+    <FxCompile Include="MainMS.hlsl">
+      <Filter>Файлы ресурсов\Шейдеры</Filter>
+    </FxCompile>
+    <FxCompile Include="MainPS.hlsl">
+      <Filter>Файлы ресурсов\Шейдеры</Filter>
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
-    <CopyFileToFolders Include="Dragon_LOD0.bin">
-      <Filter>Файлы ресурсов</Filter>
+    <CopyFileToFolders Include="..\Assets\Dragon_LOD0.bin">
+      <Filter>Файлы ресурсов\Модели</Filter>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Dragon_LOD1.bin">
+      <Filter>Файлы ресурсов\Модели</Filter>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Dragon_LOD2.bin">
+      <Filter>Файлы ресурсов\Модели</Filter>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Dragon_LOD3.bin">
+      <Filter>Файлы ресурсов\Модели</Filter>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Dragon_LOD4.bin">
+      <Filter>Файлы ресурсов\Модели</Filter>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Dragon_LOD5.bin">
+      <Filter>Файлы ресурсов\Модели</Filter>
     </CopyFileToFolders>
   </ItemGroup>
 </Project>

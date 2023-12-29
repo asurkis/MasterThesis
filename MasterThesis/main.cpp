@@ -115,7 +115,7 @@ class RaiiImgui
 
 std::optional<RaiiImgui> raiiImgui;
 
-void RenderModel()
+void RenderModel(const Model &model)
 {
     for (uint32_t meshId = 0; meshId < model.GetMeshCount(); ++meshId)
     {
@@ -176,10 +176,10 @@ void FillCommandList()
 
     pCommandList->SetGraphicsRootSignature(mainPipeline.GetRootSignatureRaw());
     pCommandList->SetGraphicsRootConstantBufferView(0, pCameraGPU->GetGPUVirtualAddress());
-    if (drawModel) RenderModel();
+    if (drawModel) RenderModel(model);
 
     pCommandList->SetPipelineState(aabbPipeline.GetStateRaw());
-    if (drawMeshletAABB) RenderModel();
+    if (drawMeshletAABB) RenderModel(model);
 
     ImGui::Render();
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCommandList.Get());

@@ -232,22 +232,23 @@ void UpdateRenderTargetSize(UINT width, UINT height)
 
 PResource GetCurRenderTarget() { return pRenderTargets[curFrame]; }
 
-void MeshPipeline::Load(const std::filesystem::path &pathMS, const std::filesystem::path &pathPS)
+void MeshPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeAS,
+                                const std::vector<BYTE> &bytecodeMS,
+                                const std::vector<BYTE> &bytecodePS)
 {
     PPipelineState pPipelineState;
     PRootSignature pRootSignature;
 
-    std::vector<BYTE> dataMS = ReadFile(pathMS);
-    std::vector<BYTE> dataPS = ReadFile(pathPS);
-
-    ThrowIfFailed(pDevice->CreateRootSignature(0, dataMS.data(), dataMS.size(), IID_PPV_ARGS(&pRootSignature)));
+    ThrowIfFailed(pDevice->CreateRootSignature(0, bytecodeMS.data(), bytecodeMS.size(), IID_PPV_ARGS(&pRootSignature)));
 
     D3DX12_MESH_SHADER_PIPELINE_STATE_DESC psoDesc = {};
     psoDesc.pRootSignature                         = pRootSignature.Get();
-    psoDesc.MS.pShaderBytecode                     = dataMS.data();
-    psoDesc.MS.BytecodeLength                      = dataMS.size();
-    psoDesc.PS.pShaderBytecode                     = dataPS.data();
-    psoDesc.PS.BytecodeLength                      = dataPS.size();
+    psoDesc.AS.pShaderBytecode                     = bytecodeAS.data();
+    psoDesc.AS.BytecodeLength                      = bytecodeAS.size();
+    psoDesc.MS.pShaderBytecode                     = bytecodeMS.data();
+    psoDesc.MS.BytecodeLength                      = bytecodeMS.size();
+    psoDesc.PS.pShaderBytecode                     = bytecodePS.data();
+    psoDesc.PS.BytecodeLength                      = bytecodePS.size();
     psoDesc.BlendState                             = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
     psoDesc.SampleMask                             = UINT_MAX;
     psoDesc.RasterizerState                        = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
@@ -273,4 +274,21 @@ void MeshPipeline::Load(const std::filesystem::path &pathMS, const std::filesyst
 
     this->pPipelineState = std::move(pPipelineState);
     this->pRootSignature = std::move(pRootSignature);
+}
+
+void MeshPipeline::Load(const std::filesystem::path &pathMS, const std::filesystem::path &pathPS)
+{
+    std::vector<BYTE> dataMS = ReadFile(pathMS);
+    std::vector<BYTE> dataPS = ReadFile(pathPS);
+    LoadBytecode({}, dataMS, dataPS);
+}
+
+void MeshPipeline::Load(const std::filesystem::path &pathMS,
+                        const std::filesystem::path &pathPS,
+                        const std::filesystem::path &pathAS)
+{
+    std::vector<BYTE> dataMS = ReadFile(pathMS);
+    std::vector<BYTE> dataPS = ReadFile(pathPS);
+    std::vector<BYTE> dataAS = ReadFile(pathAS);
+    LoadBytecode(dataAS, dataMS, dataPS);
 }

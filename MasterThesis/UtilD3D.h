@@ -33,8 +33,15 @@ class MeshPipeline
     PPipelineState pPipelineState;
     PRootSignature pRootSignature;
 
+    void LoadBytecode(const std::vector<BYTE> &dataMS,
+                      const std::vector<BYTE> &dataPS,
+                      const std::vector<BYTE> &dataAS);
+
   public:
     void Load(const std::filesystem::path &pathMS, const std::filesystem::path &pathPS);
+    void Load(const std::filesystem::path &pathMS,
+              const std::filesystem::path &pathPS,
+              const std::filesystem::path &pathAS);
 
     ID3D12PipelineState *GetStateRaw() const noexcept { return pPipelineState.Get(); }
     ID3D12RootSignature *GetRootSignatureRaw() const noexcept { return pRootSignature.Get(); }

@@ -152,10 +152,25 @@
     <ClInclude Include="UtilWin32.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include=".clang-format" />
-    <CopyFileToFolders Include="Dragon_LOD0.bin">
+    <CopyFileToFolders Include="..\Assets\Dragon_LOD0.bin">
       <FileType>Document</FileType>
     </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Dragon_LOD1.bin">
+      <FileType>Document</FileType>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Dragon_LOD2.bin">
+      <FileType>Document</FileType>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Dragon_LOD3.bin">
+      <FileType>Document</FileType>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Dragon_LOD4.bin">
+      <FileType>Document</FileType>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="..\Assets\Dragon_LOD5.bin">
+      <FileType>Document</FileType>
+    </CopyFileToFolders>
+    <None Include=".clang-format" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="AABB_MS.hlsl">
