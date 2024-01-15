@@ -1,40 +1,6 @@
 #include "MainCommon.hlsli"
 
-struct CameraData
-{
-    float4x4 MatView;
-    float4x4 MatProj;
-    float4x4 MatViewProj;
-    float4x4 MatNormal;
-};
-
-struct MeshInfoData
-{
-    uint IndexBytes;
-    uint MeshletOffset;
-};
-
-struct Vertex
-{
-    float3 Position;
-    float3 Normal;
-};
-
-struct Meshlet
-{
-    uint VertCount;
-    uint VertOffset;
-    uint PrimCount;
-    uint PrimOffset;
-};
-
-ConstantBuffer<CameraData> Camera : register(b0);
-ConstantBuffer<MeshInfoData> MeshInfo : register(b1);
-
-StructuredBuffer<Vertex> Vertices : register(t0);
-StructuredBuffer<Meshlet> Meshlets : register(t1);
-ByteAddressBuffer UniqueVertexIndices : register(t2);
-StructuredBuffer<uint> PrimitiveIndices : register(t3);
+#define GROUP_SIZE 128
 
 uint3 UnpackPrimitive(uint primitive)
 {
@@ -84,14 +50,9 @@ VertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
     return vout;
 }
 
-[RootSignature("CBV(b0), \
-                RootConstants(b1, num32bitconstants=2), \
-                SRV(t0), \
-                SRV(t1), \
-                SRV(t2), \
-                SRV(t3)")]
+[RootSignature(ROOT_SIG)]
 [OutputTopology("triangle")]
-[numthreads(128, 1, 1)]
+[numthreads(GROUP_SIZE, 1, 1)]
 void main(
     uint gid : SV_GroupID,
     uint gtid : SV_GroupThreadID,

@@ -1,40 +1,5 @@
 #include "AABB_Common.hlsli"
 
-struct CameraData
-{
-    float4x4 MatView;
-    float4x4 MatProj;
-    float4x4 MatViewProj;
-    float4x4 MatNormalViewProj;
-};
-
-struct MeshInfoData
-{
-    uint IndexBytes;
-    uint MeshletOffset;
-};
-
-struct Vertex
-{
-    float3 Position;
-    float3 Normal;
-};
-
-struct Meshlet
-{
-    uint VertCount;
-    uint VertOffset;
-    uint PrimCount;
-    uint PrimOffset;
-};
-
-ConstantBuffer<CameraData> Camera : register(b0);
-ConstantBuffer<MeshInfoData> MeshInfo : register(b1);
-
-StructuredBuffer<Vertex> Vertices : register(t0);
-StructuredBuffer<Meshlet> Meshlets : register(t1);
-ByteAddressBuffer UniqueVertexIndices : register(t2);
-
 uint GetVertexIndex(Meshlet m, uint localIndex)
 {
     localIndex += m.VertOffset;
@@ -73,14 +38,9 @@ VertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
 groupshared float3 aabbMin[GROUP_SIZE];
 groupshared float3 aabbMax[GROUP_SIZE];
 
-[RootSignature("CBV(b0), \
-                RootConstants(b1, num32bitconstants=2), \
-                SRV(t0), \
-                SRV(t1), \
-                SRV(t2), \
-                SRV(t3)")]
+[RootSignature(ROOT_SIG)]
 [OutputTopology("line")]
-[numthreads(128, 1, 1)]
+[numthreads(GROUP_SIZE, 1, 1)]
 void main(
     uint gid : SV_GroupID,
     uint gtid : SV_GroupThreadID,
@@ -88,7 +48,6 @@ void main(
     out vertices VertexOut verts[8])
 {
     Meshlet m = Meshlets[gid];
-    SetMeshOutputCounts(8, 12);
 
     if (gtid < m.VertCount)
     {
@@ -115,8 +74,11 @@ void main(
         GroupMemoryBarrier();
     }
 
+    SetMeshOutputCounts(8, 12);
+
     if (gtid < 8)
     {
+        /*
         float3 ogPos;
         float3 boxMin = aabbMin[0];
         float3 boxMax = aabbMax[0];
@@ -151,6 +113,48 @@ void main(
         VertexOut vout;
         vout.PositionVS = mul(float4(ogPos, 1), Camera.MatView).xyz;
         vout.PositionHS = mul(float4(ogPos, 1), Camera.MatViewProj);
+        vout.MeshletIndex = gid;
+        verts[gtid] = vout;
+        */
+        
+        float3 xyz;
+        switch (gtid)
+        {
+            case 0:
+                xyz = float3(-1, -1, -1);
+                break;
+            case 1:
+                xyz = float3(1, -1, -1);
+                break;
+            case 2:
+                xyz = float3(-1, 1, -1);
+                break;
+            case 3:
+                xyz = float3(1, 1, -1);
+                break;
+            case 4:
+                xyz = float3(-1, -1, 1);
+                break;
+            case 5:
+                xyz = float3(1, -1, 1);
+                break;
+            case 6:
+                xyz = float3(-1, 1, 1);
+                break;
+            case 7:
+                xyz = float3(1, 1, 1);
+                break;
+        }
+        
+        float4 sphere = MeshletCulls[gid].BoundingSphere;
+        float3 center = sphere.xyz;
+        float radius = sphere.w;
+
+        float3 centerVS = mul(float4(center, 1), Camera.MatView).xyz;
+        
+        VertexOut vout;
+        vout.PositionVS = centerVS + radius * xyz;
+        vout.PositionHS = mul(float4(vout.PositionVS, 1), Camera.MatProj);
         vout.MeshletIndex = gid;
         verts[gtid] = vout;
     }

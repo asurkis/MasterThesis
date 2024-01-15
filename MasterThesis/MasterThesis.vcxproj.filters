@@ -53,6 +53,9 @@
     <ClInclude Include="Span.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
+    <ClInclude Include="Shared.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include=".clang-format" />
@@ -74,6 +77,12 @@
       <Filter>Файлы ресурсов\Шейдеры</Filter>
     </FxCompile>
     <FxCompile Include="MainPS.hlsl">
+      <Filter>Файлы ресурсов\Шейдеры</Filter>
+    </FxCompile>
+    <FxCompile Include="AABB_AS.hlsl">
+      <Filter>Файлы ресурсов\Шейдеры</Filter>
+    </FxCompile>
+    <FxCompile Include="MainAS.hlsl">
       <Filter>Файлы ресурсов\Шейдеры</Filter>
     </FxCompile>
   </ItemGroup>

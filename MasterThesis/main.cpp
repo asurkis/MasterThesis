@@ -1,6 +1,7 @@
 #include "stdafx.h"
 
 #include "Model.h"
+#include "Shared.h"
 #include "UtilD3D.h"
 #include "UtilWin32.h"
 #include <DirectXMath.h>
@@ -41,7 +42,7 @@ bool drawMeshletAABB = false;
 CameraData CameraCB;
 PResource  pCameraGPU;
 
-Model model;
+Model models[N_LODS_MAX];
 
 void LoadAssets()
 {
@@ -71,12 +72,17 @@ void LoadAssets()
                                                        IID_PPV_ARGS(&pCameraGPU)));
     }
 
-    std::filesystem::path dragonPath = assetPath / "Dragon_LOD0.bin";
-    ThrowIfFailed(model.LoadFromFile(dragonPath.c_str()));
-    ThrowIfFailed(model.UploadGpuResources(pDevice.Get(),
-                                           pCommandQueueDirect.Get(),
-                                           pCommandAllocator.Get(),
-                                           pCommandList.Get()));
+    for (int i = 0; i < N_LODS_MAX; ++i)
+    {
+        std::ostringstream oss;
+        oss << "Dragon_LOD" << i << ".bin";
+        std::filesystem::path dragonPath = assetPath / oss.str();
+        ThrowIfFailed(models[i].LoadFromFile(dragonPath.c_str()));
+        ThrowIfFailed(models[i].UploadGpuResources(pDevice.Get(),
+                                                   pCommandQueueDirect.Get(),
+                                                   pCommandAllocator.Get(),
+                                                   pCommandList.Get()));
+    }
 }
 
 class RaiiImgui
@@ -115,8 +121,9 @@ class RaiiImgui
 
 std::optional<RaiiImgui> raiiImgui;
 
-void RenderModel(const Model &model)
+void RenderModel(int modelId)
 {
+    const Model &model = models[modelId];
     for (uint32_t meshId = 0; meshId < model.GetMeshCount(); ++meshId)
     {
         auto &mesh = model.GetMesh(meshId);
@@ -126,6 +133,7 @@ void RenderModel(const Model &model)
         pCommandList->SetGraphicsRootShaderResourceView(3, mesh.MeshletResource->GetGPUVirtualAddress());
         pCommandList->SetGraphicsRootShaderResourceView(4, mesh.UniqueVertexIndexResource->GetGPUVirtualAddress());
         pCommandList->SetGraphicsRootShaderResourceView(5, mesh.PrimitiveIndexResource->GetGPUVirtualAddress());
+        pCommandList->SetGraphicsRootShaderResourceView(6, mesh.CullDataResource->GetGPUVirtualAddress());
 
         for (size_t subsetId = 0; subsetId < mesh.MeshletSubsets.size(); ++subsetId)
         {
@@ -147,8 +155,8 @@ void FillCommandList()
     D3D12_VIEWPORT viewport = {};
     viewport.TopLeftX       = 0.0f;
     viewport.TopLeftY       = 0.0f;
-    viewport.Width          = static_cast<float>(WindowWidth);
-    viewport.Height         = static_cast<float>(WindowHeight);
+    viewport.Width          = float(WindowWidth);
+    viewport.Height         = float(WindowHeight);
     viewport.MinDepth       = D3D12_MIN_DEPTH;
     viewport.MaxDepth       = D3D12_MAX_DEPTH;
 
@@ -176,10 +184,16 @@ void FillCommandList()
 
     pCommandList->SetGraphicsRootSignature(mainPipeline.GetRootSignatureRaw());
     pCommandList->SetGraphicsRootConstantBufferView(0, pCameraGPU->GetGPUVirtualAddress());
-    if (drawModel) RenderModel(model);
+    if (drawModel)
+    {
+        for (int i = 0; i < N_LODS_MAX; ++i) RenderModel(i);
+    }
 
     pCommandList->SetPipelineState(aabbPipeline.GetStateRaw());
-    if (drawMeshletAABB) RenderModel(model);
+    if (drawMeshletAABB)
+    {
+        for (int i = 0; i < N_LODS_MAX; ++i) RenderModel(i);
+    }
 
     ImGui::Render();
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCommandList.Get());
@@ -216,15 +230,15 @@ void OnRender()
     ImGui::Checkbox("Draw meshlet AABB", &drawMeshletAABB);
     ImGui::End();
 
-    float aspect    = WindowWidth / static_cast<float>(WindowHeight);
+    float aspect    = float(WindowWidth) / float(WindowHeight);
     float deltaTime = ImGui::GetIO().DeltaTime;
 
     if (!ImGui::GetIO().WantCaptureMouse)
     {
         ImVec2 mouseDelta = ImGui::GetMouseDragDelta(0, 0.0f);
         ImGui::ResetMouseDragDelta();
-        camRotX += mouseDelta.y / static_cast<float>(WindowHeight);
-        camRotY += mouseDelta.x / static_cast<float>(WindowHeight);
+        camRotX += mouseDelta.y / float(WindowHeight);
+        camRotY += mouseDelta.x / float(WindowHeight);
         camRotX = std::clamp(camRotX, -XM_PIDIV2, XM_PIDIV2);
         while (camRotY < -XM_PI) camRotY += XM_2PI;
         while (camRotY > XM_PI) camRotY -= XM_2PI;
@@ -252,9 +266,6 @@ void OnRender()
     }
 
     XMVECTOR vecUp = XMVector3Cross(vecRight, vecForward);
-
-    static float angle = 0.0f;
-    angle += ImGui::GetIO().DeltaTime;
 
     XMMATRIX matRot = XMMatrixSet(XMVectorGetX(vecRight),
                                   XMVectorGetX(vecUp),
@@ -323,7 +334,7 @@ int WINAPI wWinMain(_In_ HINSTANCE     hCurInstance,
         }
 
         WaitForAllFrames();
-        return static_cast<int>(msg.wParam);
+        return int(msg.wParam);
     }
     catch (const std::runtime_error &err)
     {
