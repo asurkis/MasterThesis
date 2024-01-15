@@ -171,6 +171,8 @@
       <FileType>Document</FileType>
     </CopyFileToFolders>
     <None Include=".clang-format" />
+    <None Include="AABB_Common.hlsli" />
+    <None Include="MainCommon.hlsli" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="AABB_MS.hlsl">

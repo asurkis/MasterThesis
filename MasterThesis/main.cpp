@@ -280,7 +280,7 @@ void OnRender()
     CameraCB.MatViewProj = CameraCB.MatProj * CameraCB.MatView;
     CameraCB.MatNormal   = XMMatrixTranspose(XMMatrixInverse(nullptr, CameraCB.MatView));
 
-    void *        pCameraDataBegin;
+    void         *pCameraDataBegin;
     CD3DX12_RANGE readRange(0, 0);
     ThrowIfFailed(pCameraGPU->Map(0, &readRange, &pCameraDataBegin));
     memcpy(pCameraDataBegin, &CameraCB, sizeof(CameraCB));

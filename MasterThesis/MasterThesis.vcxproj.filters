@@ -56,6 +56,12 @@
   </ItemGroup>
   <ItemGroup>
     <None Include=".clang-format" />
+    <None Include="MainCommon.hlsli">
+      <Filter>Файлы ресурсов\Шейдеры</Filter>
+    </None>
+    <None Include="AABB_Common.hlsli">
+      <Filter>Файлы ресурсов\Шейдеры</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="AABB_MS.hlsl">

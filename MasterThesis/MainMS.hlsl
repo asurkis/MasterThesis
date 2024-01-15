@@ -1,3 +1,5 @@
+#include "MainCommon.hlsli"
+
 struct CameraData
 {
     float4x4 MatView;
@@ -26,21 +28,13 @@ struct Meshlet
     uint PrimOffset;
 };
 
-struct VertexOut
-{
-    float4 PositionHS : SV_Position;
-    float3 PositionVS : POSITION0;
-    float3 Normal : NORMAL0;
-    uint   MeshletIndex : MESHLET_INDEX;
-};
-
-ConstantBuffer<CameraData>   Camera : register(b0);
+ConstantBuffer<CameraData> Camera : register(b0);
 ConstantBuffer<MeshInfoData> MeshInfo : register(b1);
 
-StructuredBuffer<Vertex>  Vertices : register(t0);
+StructuredBuffer<Vertex> Vertices : register(t0);
 StructuredBuffer<Meshlet> Meshlets : register(t1);
-ByteAddressBuffer         UniqueVertexIndices : register(t2);
-StructuredBuffer<uint>    PrimitiveIndices : register(t3);
+ByteAddressBuffer UniqueVertexIndices : register(t2);
+StructuredBuffer<uint> PrimitiveIndices : register(t3);
 
 uint3 UnpackPrimitive(uint primitive)
 {
@@ -70,7 +64,7 @@ uint GetVertexIndex(Meshlet m, uint localIndex)
 
         // Grab the pair of 16-bit indices, shift & mask off proper 16-bits.
         uint indexPair = UniqueVertexIndices.Load(byteOffset);
-        uint index     = (indexPair >> wordOffset) & 0xFFFF;
+        uint index = (indexPair >> wordOffset) & 0xFFFF;
 
         return index;
     }
@@ -81,9 +75,9 @@ VertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
     Vertex v = Vertices[vertexIndex];
 
     VertexOut vout;
-    vout.PositionVS   = mul(float4(v.Position, 1), Camera.MatView).xyz;
-    vout.PositionHS   = mul(float4(v.Position, 1), Camera.MatViewProj);
-    vout.Normal       = mul(float4(v.Normal, 0), Camera.MatNormal).xyz;
+    vout.PositionVS = mul(float4(v.Position, 1), Camera.MatView).xyz;
+    vout.PositionHS = mul(float4(v.Position, 1), Camera.MatViewProj);
+    vout.Normal = mul(float4(v.Normal, 0), Camera.MatNormal).xyz;
     vout.MeshletIndex = meshletIndex;
     // vout.Normal       = v.Normal;
 
@@ -107,11 +101,12 @@ void main(
     Meshlet m = Meshlets[gid];
     SetMeshOutputCounts(m.VertCount, m.PrimCount);
 
-    if (gtid < m.PrimCount) tris[gtid] = GetPrimitive(m, gtid);
+    if (gtid < m.PrimCount)
+        tris[gtid] = GetPrimitive(m, gtid);
 
     if (gtid < m.VertCount)
     {
         uint vertexIndex = GetVertexIndex(m, gtid);
-        verts[gtid]      = GetVertexAttributes(gid, vertexIndex);
+        verts[gtid] = GetVertexAttributes(gid, vertexIndex);
     }
 }

@@ -1,9 +1,4 @@
-struct VertexOut
-{
-    float4 PositionHS : SV_Position;
-    float3 PositionVS : POSITION0;
-    uint   MeshletIndex : MESHLET_INDEX;
-};
+#include "AABB_Common.hlsli"
 
 float4 main(VertexOut input) : SV_Target
 {

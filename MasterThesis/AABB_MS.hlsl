@@ -1,3 +1,5 @@
+#include "AABB_Common.hlsli"
+
 struct CameraData
 {
     float4x4 MatView;
@@ -26,19 +28,12 @@ struct Meshlet
     uint PrimOffset;
 };
 
-struct VertexOut
-{
-    float4 PositionHS : SV_Position;
-    float3 PositionVS : POSITION0;
-    uint   MeshletIndex : MESHLET_INDEX;
-};
-
-ConstantBuffer<CameraData>   Camera : register(b0);
+ConstantBuffer<CameraData> Camera : register(b0);
 ConstantBuffer<MeshInfoData> MeshInfo : register(b1);
 
-StructuredBuffer<Vertex>  Vertices : register(t0);
+StructuredBuffer<Vertex> Vertices : register(t0);
 StructuredBuffer<Meshlet> Meshlets : register(t1);
-ByteAddressBuffer         UniqueVertexIndices : register(t2);
+ByteAddressBuffer UniqueVertexIndices : register(t2);
 
 uint GetVertexIndex(Meshlet m, uint localIndex)
 {
@@ -56,7 +51,7 @@ uint GetVertexIndex(Meshlet m, uint localIndex)
 
         // Grab the pair of 16-bit indices, shift & mask off proper 16-bits.
         uint indexPair = UniqueVertexIndices.Load(byteOffset);
-        uint index     = (indexPair >> wordOffset) & 0xFFFF;
+        uint index = (indexPair >> wordOffset) & 0xFFFF;
 
         return index;
     }
@@ -67,8 +62,8 @@ VertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
     Vertex v = Vertices[vertexIndex];
 
     VertexOut vout;
-    vout.PositionVS   = mul(float4(v.Position, 1), Camera.MatView).xyz;
-    vout.PositionHS   = mul(float4(v.Position, 1), Camera.MatViewProj);
+    vout.PositionVS = mul(float4(v.Position, 1), Camera.MatView).xyz;
+    vout.PositionHS = mul(float4(v.Position, 1), Camera.MatViewProj);
     vout.MeshletIndex = meshletIndex;
 
     return vout;
@@ -97,8 +92,8 @@ void main(
 
     if (gtid < m.VertCount)
     {
-        uint   vid  = GetVertexIndex(m, gtid);
-        Vertex v    = Vertices[vid];
+        uint vid = GetVertexIndex(m, gtid);
+        Vertex v = Vertices[vid];
         aabbMin[gtid] = v.Position;
         aabbMax[gtid] = v.Position;
     }
@@ -127,36 +122,76 @@ void main(
         float3 boxMax = aabbMax[0];
         switch (gtid)
         {
-        case 0: ogPos = float3(boxMin.x, boxMin.y, boxMin.z); break;
-        case 1: ogPos = float3(boxMax.x, boxMin.y, boxMin.z); break;
-        case 2: ogPos = float3(boxMin.x, boxMax.y, boxMin.z); break;
-        case 3: ogPos = float3(boxMax.x, boxMax.y, boxMin.z); break;
-        case 4: ogPos = float3(boxMin.x, boxMin.y, boxMax.z); break;
-        case 5: ogPos = float3(boxMax.x, boxMin.y, boxMax.z); break;
-        case 6: ogPos = float3(boxMin.x, boxMax.y, boxMax.z); break;
-        case 7: ogPos = float3(boxMax.x, boxMax.y, boxMax.z); break;
+            case 0:
+                ogPos = float3(boxMin.x, boxMin.y, boxMin.z);
+                break;
+            case 1:
+                ogPos = float3(boxMax.x, boxMin.y, boxMin.z);
+                break;
+            case 2:
+                ogPos = float3(boxMin.x, boxMax.y, boxMin.z);
+                break;
+            case 3:
+                ogPos = float3(boxMax.x, boxMax.y, boxMin.z);
+                break;
+            case 4:
+                ogPos = float3(boxMin.x, boxMin.y, boxMax.z);
+                break;
+            case 5:
+                ogPos = float3(boxMax.x, boxMin.y, boxMax.z);
+                break;
+            case 6:
+                ogPos = float3(boxMin.x, boxMax.y, boxMax.z);
+                break;
+            case 7:
+                ogPos = float3(boxMax.x, boxMax.y, boxMax.z);
+                break;
         }
 
         VertexOut vout;
-        vout.PositionVS   = mul(float4(ogPos, 1), Camera.MatView).xyz;
-        vout.PositionHS   = mul(float4(ogPos, 1), Camera.MatViewProj);
+        vout.PositionVS = mul(float4(ogPos, 1), Camera.MatView).xyz;
+        vout.PositionHS = mul(float4(ogPos, 1), Camera.MatViewProj);
         vout.MeshletIndex = gid;
-        verts[gtid]       = vout;
+        verts[gtid] = vout;
     }
 
     switch (gtid)
     {
-    case 0: lines[gtid] = uint2(0, 1); break;
-    case 1: lines[gtid] = uint2(0, 2); break;
-    case 2: lines[gtid] = uint2(0, 4); break;
-    case 3: lines[gtid] = uint2(1, 3); break;
-    case 4: lines[gtid] = uint2(1, 5); break;
-    case 5: lines[gtid] = uint2(2, 3); break;
-    case 6: lines[gtid] = uint2(2, 6); break;
-    case 7: lines[gtid] = uint2(3, 7); break;
-    case 8: lines[gtid] = uint2(4, 5); break;
-    case 9: lines[gtid] = uint2(4, 6); break;
-    case 10: lines[gtid] = uint2(5, 7); break;
-    case 11: lines[gtid] = uint2(6, 7); break;
+        case 0:
+            lines[gtid] = uint2(0, 1);
+            break;
+        case 1:
+            lines[gtid] = uint2(0, 2);
+            break;
+        case 2:
+            lines[gtid] = uint2(0, 4);
+            break;
+        case 3:
+            lines[gtid] = uint2(1, 3);
+            break;
+        case 4:
+            lines[gtid] = uint2(1, 5);
+            break;
+        case 5:
+            lines[gtid] = uint2(2, 3);
+            break;
+        case 6:
+            lines[gtid] = uint2(2, 6);
+            break;
+        case 7:
+            lines[gtid] = uint2(3, 7);
+            break;
+        case 8:
+            lines[gtid] = uint2(4, 5);
+            break;
+        case 9:
+            lines[gtid] = uint2(4, 6);
+            break;
+        case 10:
+            lines[gtid] = uint2(5, 7);
+            break;
+        case 11:
+            lines[gtid] = uint2(6, 7);
+            break;
     }
 }
