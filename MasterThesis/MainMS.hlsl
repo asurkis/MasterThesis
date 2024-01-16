@@ -8,13 +8,13 @@ uint3 UnpackPrimitive(uint primitive)
     return uint3(primitive & 0x3FF, (primitive >> 10) & 0x3FF, (primitive >> 20) & 0x3FF);
 }
 
-uint3 GetPrimitive(Meshlet m, uint index)
+uint3 GetPrimitive(TMeshlet m, uint index)
 {
     uint prim = PrimitiveIndices[m.PrimOffset + index];
     return UnpackPrimitive(prim);
 }
 
-uint GetVertexIndex(Meshlet m, uint localIndex)
+uint GetVertexIndex(TMeshlet m, uint localIndex)
 {
     localIndex += m.VertOffset;
 
@@ -36,11 +36,11 @@ uint GetVertexIndex(Meshlet m, uint localIndex)
     }
 }
 
-VertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
+TVertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
 {
-    Vertex v = Vertices[vertexIndex];
+    TVertex v = Vertices[vertexIndex];
 
-    VertexOut vout;
+    TVertexOut vout;
     vout.PositionVS = mul(float4(v.Position, 1), Camera.MatView).xyz;
     vout.PositionHS = mul(float4(v.Position, 1), Camera.MatViewProj);
     vout.Normal = mul(float4(v.Normal, 0), Camera.MatNormal).xyz;
@@ -57,9 +57,9 @@ void main(
     uint gid : SV_GroupID,
     uint gtid : SV_GroupThreadID,
     out indices uint3 tris[126],
-    out vertices VertexOut verts[64])
+    out vertices TVertexOut verts[64])
 {
-    Meshlet m = Meshlets[gid];
+    TMeshlet m = Meshlets[gid];
     SetMeshOutputCounts(m.VertCount, m.PrimCount);
 
     if (gtid < m.PrimCount)

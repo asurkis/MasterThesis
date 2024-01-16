@@ -1,6 +1,6 @@
 #include "MainCommon.hlsli"
 
-float4 main(VertexOut input) : SV_Target
+float4 main(TVertexOut input) : SV_Target
 {
     float ambientIntensity = 0.1;
     float3 lightColor = float3(1, 1, 1);

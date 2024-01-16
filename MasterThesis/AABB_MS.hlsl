@@ -1,6 +1,6 @@
 #include "AABB_Common.hlsli"
 
-uint GetVertexIndex(Meshlet m, uint localIndex)
+uint GetVertexIndex(TMeshlet m, uint localIndex)
 {
     localIndex += m.VertOffset;
 
@@ -24,7 +24,7 @@ uint GetVertexIndex(Meshlet m, uint localIndex)
 
 VertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
 {
-    Vertex v = Vertices[vertexIndex];
+    TVertex v = Vertices[vertexIndex];
 
     VertexOut vout;
     vout.PositionVS = mul(float4(v.Position, 1), Camera.MatView).xyz;
@@ -47,12 +47,12 @@ void main(
     out indices uint2 lines[12],
     out vertices VertexOut verts[8])
 {
-    Meshlet m = Meshlets[gid];
+    TMeshlet m = Meshlets[gid];
 
     if (gtid < m.VertCount)
     {
         uint vid = GetVertexIndex(m, gtid);
-        Vertex v = Vertices[vid];
+        TVertex v = Vertices[vid];
         aabbMin[gtid] = v.Position;
         aabbMax[gtid] = v.Position;
     }

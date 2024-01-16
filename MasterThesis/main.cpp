@@ -23,14 +23,6 @@ UINT            srvDescSize;
 MeshPipeline mainPipeline;
 MeshPipeline aabbPipeline;
 
-struct CameraData
-{
-    XMMATRIX MatView;
-    XMMATRIX MatProj;
-    XMMATRIX MatViewProj;
-    XMMATRIX MatNormal;
-};
-
 XMVECTOR camPos   = XMVectorSet(-100.0f, 80.0f, 150.0f, 0.0f);
 float    camRotX  = XMConvertToRadians(0.0f);
 float    camRotY  = XMConvertToRadians(135.0f);
@@ -39,7 +31,7 @@ float    camSpeed = 50.0f;
 bool drawModel       = true;
 bool drawMeshletAABB = false;
 
-CameraData CameraCB;
+TCamera CameraCB;
 PResource  pCameraGPU;
 
 Model models[N_LODS_MAX];
@@ -127,7 +119,6 @@ void RenderModel(int modelId)
     for (uint32_t meshId = 0; meshId < model.GetMeshCount(); ++meshId)
     {
         auto &mesh = model.GetMesh(meshId);
-
         pCommandList->SetGraphicsRoot32BitConstant(1, mesh.IndexSize, 0);
         pCommandList->SetGraphicsRootShaderResourceView(2, mesh.VertexResources[0]->GetGPUVirtualAddress());
         pCommandList->SetGraphicsRootShaderResourceView(3, mesh.MeshletResource->GetGPUVirtualAddress());
