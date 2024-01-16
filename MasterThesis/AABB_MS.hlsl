@@ -42,12 +42,14 @@ groupshared float3 aabbMax[GROUP_SIZE];
 [OutputTopology("line")]
 [numthreads(GROUP_SIZE, 1, 1)]
 void main(
+    in payload TPayload Payload,
     uint gid : SV_GroupID,
     uint gtid : SV_GroupThreadID,
     out indices uint2 lines[12],
     out vertices VertexOut verts[8])
 {
-    TMeshlet m = Meshlets[gid];
+    uint meshletIndex = Payload.MeshletIndex[gid];
+    TMeshlet m = Meshlets[meshletIndex];
 
     if (gtid < m.VertCount)
     {
@@ -78,84 +80,26 @@ void main(
 
     if (gtid < 8)
     {
+        float3 shift;
+        shift.x = gtid & 1 ? 1 : -1;
+        shift.y = gtid & 2 ? 1 : -1;
+        shift.z = gtid & 4 ? 1 : -1;
+        
+        float4 sphere = MeshletCulls[meshletIndex].BoundingSphere;
+        float3 ogPos = sphere.xyz + sphere.w * shift;
         /*
         float3 ogPos;
         float3 boxMin = aabbMin[0];
         float3 boxMax = aabbMax[0];
-        switch (gtid)
-        {
-            case 0:
-                ogPos = float3(boxMin.x, boxMin.y, boxMin.z);
-                break;
-            case 1:
-                ogPos = float3(boxMax.x, boxMin.y, boxMin.z);
-                break;
-            case 2:
-                ogPos = float3(boxMin.x, boxMax.y, boxMin.z);
-                break;
-            case 3:
-                ogPos = float3(boxMax.x, boxMax.y, boxMin.z);
-                break;
-            case 4:
-                ogPos = float3(boxMin.x, boxMin.y, boxMax.z);
-                break;
-            case 5:
-                ogPos = float3(boxMax.x, boxMin.y, boxMax.z);
-                break;
-            case 6:
-                ogPos = float3(boxMin.x, boxMax.y, boxMax.z);
-                break;
-            case 7:
-                ogPos = float3(boxMax.x, boxMax.y, boxMax.z);
-                break;
-        }
+        ogPos.x = gtid & 1 ? boxMax.x : boxMin.x;
+        ogPos.y = gtid & 2 ? boxMax.y : boxMin.y;
+        ogPos.z = gtid & 4 ? boxMax.z : boxMin.z;
+        */
 
         VertexOut vout;
         vout.PositionVS = mul(float4(ogPos, 1), Camera.MatView).xyz;
         vout.PositionHS = mul(float4(ogPos, 1), Camera.MatViewProj);
-        vout.MeshletIndex = gid;
-        verts[gtid] = vout;
-        */
-        
-        float3 xyz;
-        switch (gtid)
-        {
-            case 0:
-                xyz = float3(-1, -1, -1);
-                break;
-            case 1:
-                xyz = float3(1, -1, -1);
-                break;
-            case 2:
-                xyz = float3(-1, 1, -1);
-                break;
-            case 3:
-                xyz = float3(1, 1, -1);
-                break;
-            case 4:
-                xyz = float3(-1, -1, 1);
-                break;
-            case 5:
-                xyz = float3(1, -1, 1);
-                break;
-            case 6:
-                xyz = float3(-1, 1, 1);
-                break;
-            case 7:
-                xyz = float3(1, 1, 1);
-                break;
-        }
-        
-        float4 sphere = MeshletCulls[gid].BoundingSphere;
-        float3 center = sphere.xyz;
-        float radius = sphere.w;
-
-        float3 centerVS = mul(float4(center, 1), Camera.MatView).xyz;
-        
-        VertexOut vout;
-        vout.PositionVS = centerVS + radius * xyz;
-        vout.PositionHS = mul(float4(vout.PositionVS, 1), Camera.MatProj);
-        vout.MeshletIndex = gid;
+        vout.MeshletIndex = meshletIndex;
         verts[gtid] = vout;
     }
 

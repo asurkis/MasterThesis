@@ -54,12 +54,14 @@ TVertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
 [OutputTopology("triangle")]
 [numthreads(GROUP_SIZE, 1, 1)]
 void main(
+    in payload TPayload Payload,
     uint gid : SV_GroupID,
     uint gtid : SV_GroupThreadID,
     out indices uint3 tris[126],
     out vertices TVertexOut verts[64])
 {
-    TMeshlet m = Meshlets[gid];
+    uint meshletIndex = Payload.MeshletIndex[gid];
+    TMeshlet m = Meshlets[meshletIndex];
     SetMeshOutputCounts(m.VertCount, m.PrimCount);
 
     if (gtid < m.PrimCount)
@@ -68,6 +70,6 @@ void main(
     if (gtid < m.VertCount)
     {
         uint vertexIndex = GetVertexIndex(m, gtid);
-        verts[gtid] = GetVertexAttributes(gid, vertexIndex);
+        verts[gtid] = GetVertexAttributes(meshletIndex, vertexIndex);
     }
 }

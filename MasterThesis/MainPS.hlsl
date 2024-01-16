@@ -1,7 +1,14 @@
 #include "MainCommon.hlsli"
 
+float4 DebugNormal(float3 normal)
+{
+    return float4(0.5 * normal + (0.5).xxx, 1);
+}
+
 float4 main(TVertexOut input) : SV_Target
 {
+    // return DebugNormal(input.Normal);
+    
     float ambientIntensity = 0.1;
     float3 lightColor = float3(1, 1, 1);
     float3 lightDir = -normalize(float3(-1, -1, -10));
@@ -22,6 +29,6 @@ float4 main(TVertexOut input) : SV_Target
     blinnTerm = pow(blinnTerm, shininess);
 
     float3 finalColor = (cosAngle + blinnTerm + ambientIntensity) * diffuseColor;
-
+    
     return float4(finalColor, 1);
 }

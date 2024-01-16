@@ -1,18 +1,24 @@
 #pragma once
 
-#define N_LODS_MAX 6
-
 #ifdef __cplusplus
 
 #include <DirectXMath.h>
 
 using uint  = uint32_t;
-using float4 = DirectX::XMVECTOR;
+using uint2 = DirectX::XMUINT2;
+using uint3 = DirectX::XMUINT3;
+using uint4 = DirectX::XMUINT4;
+
+using float4   = DirectX::XMVECTOR;
 using float4x4 = DirectX::XMMATRIX;
 
 using float3 = DirectX::XMFLOAT3;
 
 #endif
+
+#define N_LODS_MAX 1
+#define WAVE_SIZE 32
+#define GROUP_SIZE_AS WAVE_SIZE
 
 struct TCamera
 {
@@ -22,9 +28,10 @@ struct TCamera
     float4x4 MatNormal;
 };
 
-struct TMesh
+struct TMeshInfo
 {
     uint IndexBytes;
+    uint MeshletCount;
     uint MeshletOffset;
 };
 
@@ -49,18 +56,23 @@ struct TMeshletCull
     float  ApexOffset;       // apex = center - axis * offset
 };
 
+struct TPayload
+{
+    uint MeshletIndex[GROUP_SIZE_AS];
+};
+
 #ifndef __cplusplus
 #define ROOT_SIG                                                                                                       \
     "CBV(b0),"                                                                                                         \
-    "RootConstants(b1, num32bitconstants=2),"                                                                          \
+    "RootConstants(b1, num32bitconstants=3),"                                                                          \
     "SRV(t0),"                                                                                                         \
     "SRV(t1),"                                                                                                         \
     "SRV(t2),"                                                                                                         \
     "SRV(t3),"                                                                                                         \
     "SRV(t4)"
 
-ConstantBuffer<TCamera> Camera : register(b0);
-ConstantBuffer<TMesh>   MeshInfo : register(b1);
+ConstantBuffer<TCamera>   Camera : register(b0);
+ConstantBuffer<TMeshInfo> MeshInfo : register(b1);
 
 StructuredBuffer<TVertex>      Vertices : register(t0);
 StructuredBuffer<TMeshlet>     Meshlets : register(t1);

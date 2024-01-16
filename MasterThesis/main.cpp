@@ -49,8 +49,8 @@ void LoadAssets()
         srvDescSize = pDevice->GetDescriptorHandleIncrementSize(srvDesc.Type);
     }
 
-    mainPipeline.Load(assetPath / L"MainMS.cso", assetPath / L"MainPS.cso");
-    aabbPipeline.Load(assetPath / L"AABB_MS.cso", assetPath / L"AABB_PS.cso");
+    mainPipeline.Load(assetPath / "MainMS.cso", assetPath / "MainPS.cso", assetPath / "MainAS.cso");
+    aabbPipeline.Load(assetPath / "AABB_MS.cso", assetPath / "AABB_PS.cso", assetPath / "AABB_AS.cso");
 
     {
         UINT                    camBufSize = sizeof(CameraCB);
@@ -68,7 +68,8 @@ void LoadAssets()
     {
         std::ostringstream oss;
         oss << "Dragon_LOD" << i << ".bin";
-        std::filesystem::path dragonPath = assetPath / oss.str();
+        //std::filesystem::path dragonPath = assetPath / oss.str();
+        std::filesystem::path dragonPath = assetPath / "Dragon_LOD5.bin";
         ThrowIfFailed(models[i].LoadFromFile(dragonPath.c_str()));
         ThrowIfFailed(models[i].UploadGpuResources(pDevice.Get(),
                                                    pCommandQueueDirect.Get(),
@@ -120,6 +121,8 @@ void RenderModel(int modelId)
     {
         auto &mesh = model.GetMesh(meshId);
         pCommandList->SetGraphicsRoot32BitConstant(1, mesh.IndexSize, 0);
+        //pCommandList->SetGraphicsRoot32BitConstant(1, mesh.Meshlets.size(), 1);
+        pCommandList->SetGraphicsRoot32BitConstant(1, 2, 1);
         pCommandList->SetGraphicsRootShaderResourceView(2, mesh.VertexResources[0]->GetGPUVirtualAddress());
         pCommandList->SetGraphicsRootShaderResourceView(3, mesh.MeshletResource->GetGPUVirtualAddress());
         pCommandList->SetGraphicsRootShaderResourceView(4, mesh.UniqueVertexIndexResource->GetGPUVirtualAddress());
@@ -129,8 +132,9 @@ void RenderModel(int modelId)
         for (size_t subsetId = 0; subsetId < mesh.MeshletSubsets.size(); ++subsetId)
         {
             auto &subset = mesh.MeshletSubsets[subsetId];
-            pCommandList->SetGraphicsRoot32BitConstant(1, subset.Offset, 1);
-            pCommandList->DispatchMesh(subset.Count, 1, 1);
+            pCommandList->SetGraphicsRoot32BitConstant(1, subset.Offset, 2);
+            uint nDispatch = (subset.Count + GROUP_SIZE_AS - 1) / GROUP_SIZE_AS;
+            pCommandList->DispatchMesh(nDispatch, 1, 1);
         }
     }
 }
