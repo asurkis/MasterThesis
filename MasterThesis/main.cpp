@@ -31,8 +31,8 @@ float    camSpeed = 50.0f;
 bool drawModel       = true;
 bool drawMeshletAABB = false;
 
-TCamera CameraCB;
-PResource  pCameraGPU;
+TCamera   CameraCB;
+PResource pCameraGPU;
 
 Model models[N_LODS_MAX];
 
@@ -68,8 +68,8 @@ void LoadAssets()
     {
         std::ostringstream oss;
         oss << "Dragon_LOD" << i << ".bin";
-        //std::filesystem::path dragonPath = assetPath / oss.str();
-        std::filesystem::path dragonPath = assetPath / "Dragon_LOD5.bin";
+        std::filesystem::path dragonPath = assetPath / oss.str();
+        // std::filesystem::path dragonPath = assetPath / "Dragon_LOD5.bin";
         ThrowIfFailed(models[i].LoadFromFile(dragonPath.c_str()));
         ThrowIfFailed(models[i].UploadGpuResources(pDevice.Get(),
                                                    pCommandQueueDirect.Get(),
@@ -116,13 +116,17 @@ std::optional<RaiiImgui> raiiImgui;
 
 void RenderModel(int modelId)
 {
+    bool isLowestLevel  = modelId == N_LODS_MAX - 1;
+    bool isHighestLevel = modelId == 0;
+    uint lodInfo        = (isHighestLevel ? 1 : 0) | (isLowestLevel ? 2 : 0);
+
     const Model &model = models[modelId];
     for (uint32_t meshId = 0; meshId < model.GetMeshCount(); ++meshId)
     {
         auto &mesh = model.GetMesh(meshId);
         pCommandList->SetGraphicsRoot32BitConstant(1, mesh.IndexSize, 0);
-        //pCommandList->SetGraphicsRoot32BitConstant(1, mesh.Meshlets.size(), 1);
-        pCommandList->SetGraphicsRoot32BitConstant(1, 2, 1);
+        pCommandList->SetGraphicsRoot32BitConstant(1, mesh.Meshlets.size(), 1);
+        pCommandList->SetGraphicsRoot32BitConstant(1, lodInfo, 3);
         pCommandList->SetGraphicsRootShaderResourceView(2, mesh.VertexResources[0]->GetGPUVirtualAddress());
         pCommandList->SetGraphicsRootShaderResourceView(3, mesh.MeshletResource->GetGPUVirtualAddress());
         pCommandList->SetGraphicsRootShaderResourceView(4, mesh.UniqueVertexIndexResource->GetGPUVirtualAddress());

@@ -16,7 +16,7 @@ using float3 = DirectX::XMFLOAT3;
 
 #endif
 
-#define N_LODS_MAX 1
+#define N_LODS_MAX 6
 #define WAVE_SIZE 32
 #define GROUP_SIZE_AS WAVE_SIZE
 
@@ -33,6 +33,9 @@ struct TMeshInfo
     uint IndexBytes;
     uint MeshletCount;
     uint MeshletOffset;
+    // 1 --- highest
+    // 2 --- lowest
+    uint LodBitset;
 };
 
 struct TVertex
@@ -64,7 +67,7 @@ struct TPayload
 #ifndef __cplusplus
 #define ROOT_SIG                                                                                                       \
     "CBV(b0),"                                                                                                         \
-    "RootConstants(b1, num32bitconstants=3),"                                                                          \
+    "RootConstants(b1, num32bitconstants=4),"                                                                          \
     "SRV(t0),"                                                                                                         \
     "SRV(t1),"                                                                                                         \
     "SRV(t2),"                                                                                                         \

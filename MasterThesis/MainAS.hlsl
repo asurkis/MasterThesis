@@ -9,6 +9,7 @@ bool ShouldDisplay(uint meshletIndex)
 
     float4 boundingSphere = MeshletCulls[meshletIndex].BoundingSphere;
     float3 centerVS = mul(float4(boundingSphere.xyz, 1), Camera.MatView).xyz;
+    float4 centerHS = mul(float4(boundingSphere.xyz, 1), Camera.MatViewProj);
     
     bool culledByPlane[6];
     for (i = 0; i < 6; ++i)
@@ -36,6 +37,16 @@ bool ShouldDisplay(uint meshletIndex)
         if (culledByPlane[i])
             return false;
     }
+    
+    float radiusProj = boundingSphere.w / centerHS.w;
+    bool cullable = radiusProj < 0.1;
+    bool parentCullable = radiusProj < 0.2;
+    bool isHighestLevel = MeshInfo.LodBitset & 1;
+    bool isLowestLevel = MeshInfo.LodBitset & 2;
+    if (!isLowestLevel && cullable)
+        return false;
+    if (!isHighestLevel && !parentCullable)
+        return false;
     
     return true;
 }
