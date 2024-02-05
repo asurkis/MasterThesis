@@ -7,12 +7,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MasterThesis", "MasterThesi
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "imgui", "ThirdParty\imgui\imgui.vcxproj", "{FFB7653B-AEC3-4768-96D6-8033DE3D2708}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "tinygltf", "ThirdParty\tinygltf\tinygltf.vcxproj", "{160B8A25-02D8-E430-2BF1-D2D8171D1ABF}"
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MeshConverter", "MeshConverter\MeshConverter.vcxproj", "{F4BF9D01-969F-482F-9482-4B0F05062FAE}"
-	ProjectSection(ProjectDependencies) = postProject
-		{160B8A25-02D8-E430-2BF1-D2D8171D1ABF} = {160B8A25-02D8-E430-2BF1-D2D8171D1ABF}
-	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -38,14 +33,6 @@ Global
 		{FFB7653B-AEC3-4768-96D6-8033DE3D2708}.Release|x64.Build.0 = Release|x64
 		{FFB7653B-AEC3-4768-96D6-8033DE3D2708}.Release|x86.ActiveCfg = Release|Win32
 		{FFB7653B-AEC3-4768-96D6-8033DE3D2708}.Release|x86.Build.0 = Release|Win32
-		{160B8A25-02D8-E430-2BF1-D2D8171D1ABF}.Debug|x64.ActiveCfg = Debug|x64
-		{160B8A25-02D8-E430-2BF1-D2D8171D1ABF}.Debug|x64.Build.0 = Debug|x64
-		{160B8A25-02D8-E430-2BF1-D2D8171D1ABF}.Debug|x86.ActiveCfg = Debug|Win32
-		{160B8A25-02D8-E430-2BF1-D2D8171D1ABF}.Debug|x86.Build.0 = Debug|Win32
-		{160B8A25-02D8-E430-2BF1-D2D8171D1ABF}.Release|x64.ActiveCfg = Release|x64
-		{160B8A25-02D8-E430-2BF1-D2D8171D1ABF}.Release|x64.Build.0 = Release|x64
-		{160B8A25-02D8-E430-2BF1-D2D8171D1ABF}.Release|x86.ActiveCfg = Release|Win32
-		{160B8A25-02D8-E430-2BF1-D2D8171D1ABF}.Release|x86.Build.0 = Release|Win32
 		{F4BF9D01-969F-482F-9482-4B0F05062FAE}.Debug|x64.ActiveCfg = Debug|x64
 		{F4BF9D01-969F-482F-9482-4B0F05062FAE}.Debug|x64.Build.0 = Debug|x64
 		{F4BF9D01-969F-482F-9482-4B0F05062FAE}.Debug|x86.ActiveCfg = Debug|Win32
