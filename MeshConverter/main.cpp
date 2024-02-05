@@ -1,14 +1,17 @@
-﻿#include <iostream>
+﻿#include <algorithm>
+#include <iostream>
 #include <map>
 #include <vector>
 
 #include <metis.h>
 #include <tiny_gltf.h>
 
+#define DBGOUT
+
 #if IDXTYPEWIDTH == 32
-#define IDX_C UINT32_C
+#define IDX_C INT32_C
 #elif IDXTYPEWIDTH == 64
-#define IDX_C UINT64_C
+#define IDX_C INT64_C
 #else
 #error "IDTYPEWIDTH not set"
 #endif
@@ -36,8 +39,8 @@ int main()
     std::string        err;
     std::string        warn;
     bool               success = tinyGltfCtx.LoadBinaryFromFile(&model, &err, &warn, "input.glb");
-    if (!err.empty()) std::cout << err << '\n';
-    if (!warn.empty()) std::cout << warn << '\n';
+    if (!err.empty()) std::cerr << err << '\n';
+    if (!warn.empty()) std::cerr << warn << '\n';
     if (!success) throw std::runtime_error("Fail");
 
     if (model.meshes.size() != 1) throw std::runtime_error("Should have one mesh");
@@ -95,7 +98,9 @@ int main()
     idx_t nTriangles = indexAccessor.count / 3;
     for (idx_t triangleId = 0; triangleId < nTriangles; ++triangleId)
     {
+#ifdef DBGOUT
         std::cout << "[[" << triangleId << "]]:";
+#endif
 
         idx_t vertexIdx[3] = {};
         for (int triangleVertexId = 0; triangleVertexId < 3; ++triangleVertexId)
@@ -103,14 +108,18 @@ int main()
             idx_t idx                   = indices[IDX_C(3) * triangleId + triangleVertexId];
             vertexIdx[triangleVertexId] = idx;
 
+#ifdef DBGOUT
             float *pPos = positionFloats + 3 * idx;
 
             Vec3 pos = {};
             for (int componentId = 0; componentId < 3; ++componentId) pos.m[componentId] = pPos[componentId];
 
             std::cout << "    [" << idx << "] = (" << pos.x << ", " << pos.y << ", " << pos.z << ")";
+#endif
         }
+#ifdef DBGOUT
         std::cout << '\n';
+#endif
 
         for (int triangleEdgeId = 0; triangleEdgeId < 3; ++triangleEdgeId)
         {
@@ -127,6 +136,7 @@ int main()
         }
     }
 
+#ifdef DBGOUT
     std::cout << "\nBy edge:\n";
     for (auto &byEdge : trianglesByEdge)
     {
@@ -140,6 +150,7 @@ int main()
         }
         std::cout << "]\n";
     }
+#endif
 
     idx_t              nvtxs = nTriangles;
     idx_t              ncon  = 1;
@@ -167,10 +178,13 @@ int main()
         }
         xadj.push_back(adjncy.size());
     }
-    idx_t              nparts  = (nTriangles + 255) / 256;
-    idx_t              edgecut = 0; 
+    idx_t nparts = (nTriangles + 255) / 256;
+    nparts       = std::max(nparts, IDX_C(2));
+
+    idx_t              edgecut = 0;
     std::vector<idx_t> part(nvtxs, 0);
 
+#ifdef DBGOUT
     std::cout << "\nAdjacency:\n";
     for (idx_t triangleId = 0; triangleId < nTriangles; ++triangleId)
     {
@@ -180,11 +194,14 @@ int main()
         for (idx_t i = beg; i < end; ++i) std::cout << ' ' << adjncy[i];
         std::cout << '\n';
     }
+#endif
 
     idx_t options[METIS_NOPTIONS] = {};
     METIS_SetDefaultOptions(options);
     options[METIS_OPTION_NUMBERING] = 0;
 
+    // Для разделения кроме первой фазы нужно будет
+    // использовать графы
     int metisResult = METIS_PartGraphKway(&nvtxs,
                                           &ncon,
                                           xadj.data(),
@@ -199,6 +216,13 @@ int main()
                                           &edgecut,
                                           part.data());
     if (metisResult != METIS_OK) throw std::runtime_error("METIS failed");
+
+#ifdef DBGOUT
+    for (idx_t triangleId = 0; triangleId < nTriangles; ++triangleId)
+    {
+        std::cout << "[[" << triangleId << "]] => " << part[triangleId] << '\n';
+    }
+#endif
 
     return 0;
 }
