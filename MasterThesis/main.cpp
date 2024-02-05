@@ -311,6 +311,8 @@ int WINAPI wWinMain(_In_ HINSTANCE     hCurInstance,
                     _In_ LPWSTR        lpCmdLine,
                     _In_ int           nShowCmd)
 {
+    (void)hPrevInstance;
+    (void)lpCmdLine;
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     hInstance = hCurInstance;
 
