@@ -197,7 +197,8 @@ void OnRender()
         ImGui::ResetMouseDragDelta();
         camRotX += mouseDelta.y / float(WindowHeight);
         camRotY += mouseDelta.x / float(WindowHeight);
-        camRotX = std::clamp(camRotX, -XM_PIDIV2, XM_PIDIV2);
+        camRotX = std::clamp(camRotX, 0.001f - XM_PIDIV2, XM_PIDIV2 - 0.001f);
+
         while (camRotY < -XM_PI) camRotY += XM_2PI;
         while (camRotY > XM_PI) camRotY -= XM_2PI;
     }

@@ -40,8 +40,8 @@ void main(
     in payload TPayload Payload,
     uint gid : SV_GroupID,
     uint gtid : SV_GroupThreadID,
-    out indices uint3 tris[126],
-    out vertices TVertexOut verts[64])
+    out indices uint3 tris[128],
+    out vertices TVertexOut verts[192])
 {
     uint meshletIndex = Payload.MeshletIndex[gid];
     TMeshlet m = Meshlets[meshletIndex];
@@ -50,9 +50,20 @@ void main(
     if (gtid < m.PrimCount)
         tris[gtid] = GetPrimitive(m, gtid);
 
-    if (gtid < m.VertCount)
+    uint iLocVert;
+    
+    // Повторим код 2 раза, чтобы не было менее предсказуемого цикла
+    iLocVert = gtid;
+    if (iLocVert < m.VertCount)
     {
-        uint vertexIndex = GetVertexIndex(m, gtid);
-        verts[gtid] = GetVertexAttributes(meshletIndex, vertexIndex);
+        uint iVert = GetVertexIndex(m, iLocVert);
+        verts[iLocVert] = GetVertexAttributes(meshletIndex, iVert);
+    }
+    
+    iLocVert = gtid + 128;
+    if (iLocVert < m.VertCount)
+    {
+        uint iVert = GetVertexIndex(m, iLocVert);
+        verts[iLocVert] = GetVertexAttributes(meshletIndex, iVert);
     }
 }

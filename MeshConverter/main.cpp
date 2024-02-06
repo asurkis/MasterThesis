@@ -66,7 +66,7 @@ int main()
     size_t positionStride = positionAccessor.ByteStride(positionBufferView);
     size_t normalStride   = normalAccessor.ByteStride(normalBufferView);
 
-    size_t nPositions = positionBufferView.byteLength / positionStride;
+    size_t nPositions = positionAccessor.count;
     if constexpr (DBGOUT) std::cout << "nPositions = " << nPositions << std::endl;
     unsigned char *positionBytes = &positionBuffer.data[positionBufferView.byteOffset + positionAccessor.byteOffset];
     unsigned char *normalBytes   = &normalBuffer.data[normalBufferView.byteOffset + normalAccessor.byteOffset];
@@ -185,7 +185,8 @@ int main()
         }
         xadj.push_back(idx_t(adjncy.size()));
     }
-    idx_t nParts = idx_t((nTriangles + 15) / 16);
+
+    idx_t nParts = idx_t((nTriangles + 63) / 64);
     nParts       = std::max(nParts, IDX_C(2));
 
     idx_t              edgecut = 0;
@@ -352,7 +353,7 @@ int main()
                 {
                     if (iTriVert != 0) std::cout << ", ";
                     uint iLocVert = (triangleCode >> (10 * iTriVert)) & 0x3FF;
-                    uint iVert    = outModel.GlobalIndices[meshlet.VertOffset + iLocVert];
+                    uint iVert    = outModel.GlobalIndices[size_t(meshlet.VertOffset) + iLocVert];
                     std::cout << iVert;
                 }
                 std::cout << "]\n";
