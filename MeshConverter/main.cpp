@@ -8,6 +8,8 @@
 #include <metis.h>
 #include <tiny_gltf.h>
 
+using namespace DirectX;
+
 constexpr bool DBGOUT = false;
 
 #if IDXTYPEWIDTH == 32
@@ -66,11 +68,7 @@ int main()
     size_t positionStride = positionAccessor.ByteStride(positionBufferView);
     size_t normalStride   = normalAccessor.ByteStride(normalBufferView);
 
-    size_t nPositions = positionAccessor.count;
-    if constexpr (DBGOUT) std::cout << "nPositions = " << nPositions << std::endl;
-    unsigned char *positionBytes = &positionBuffer.data[positionBufferView.byteOffset + positionAccessor.byteOffset];
-    unsigned char *normalBytes   = &normalBuffer.data[normalBufferView.byteOffset + normalAccessor.byteOffset];
-
+    if constexpr (DBGOUT) std::cout << "nPositions = " << positionAccessor.count << std::endl;
     if (positionAccessor.type != TINYGLTF_TYPE_VEC3) throw std::runtime_error("Position is not vec3");
     if (positionAccessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
         throw std::runtime_error("Position component type is not float");
@@ -78,6 +76,41 @@ int main()
     if (normalAccessor.type != TINYGLTF_TYPE_VEC3) throw std::runtime_error("Normal is not vec3");
     if (normalAccessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
         throw std::runtime_error("Normal component type is not float");
+
+    std::vector<Vertex> vertices;
+    vertices.reserve(positionAccessor.count);
+    XMVECTOR posMin;
+    XMVECTOR posMax;
+
+    for (size_t iVert = 0; iVert < positionAccessor.count; ++iVert)
+    {
+        size_t offPosition = positionBufferView.byteOffset;
+        offPosition += positionAccessor.byteOffset;
+        offPosition += positionStride * iVert;
+
+        size_t offNormal = normalBufferView.byteOffset;
+        offNormal += normalAccessor.byteOffset;
+        offNormal += normalStride * iVert;
+        unsigned char *pPosition = &positionBuffer.data[offPosition];
+        unsigned char *pNormal   = &normalBuffer.data[offNormal];
+
+        Vertex vert   = {};
+        vert.Position = *reinterpret_cast<float3 *>(pPosition);
+        vert.Normal   = *reinterpret_cast<float3 *>(pNormal);
+        vertices.push_back(vert);
+
+        XMVECTOR pos = XMLoadFloat3(&vert.Position);
+        if (iVert == 0)
+        {
+            posMin = pos;
+            posMax = pos;
+        }
+        else
+        {
+            posMin = XMVectorMin(posMin, pos);
+            posMax = XMVectorMax(posMax, pos);
+        }
+    }
 
     tinygltf::Accessor   &indexAccessor   = inModel.accessors[primitive.indices];
     tinygltf::BufferView &indexBufferView = inModel.bufferViews[indexAccessor.bufferView];
@@ -121,8 +154,7 @@ int main()
 
             if constexpr (DBGOUT)
             {
-                unsigned char *pVert = positionBytes + positionStride * iVert;
-                float3         pos   = *reinterpret_cast<float3 *>(pVert);
+                float3 pos = vertices[iVert].Position;
                 std::cout << "    V[" << iVert << "] = (" << pos.x << ", " << pos.y << ", " << pos.z << ")";
             }
         }
@@ -165,22 +197,35 @@ int main()
     xadj.reserve(size_t(nvtxs) + 1);
     xadj.push_back(0);
     std::vector<idx_t> adjncy;
+    std::vector<idx_t> adjwgt;
+
+    XMVECTOR maxDiff = posMax - posMin;
+    float    maxLen  = XMVectorGetX(XMVector3Length(maxDiff)) * (1.0f + FLT_EPSILON);
+
     for (idx_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
     {
-        idx_t vertices[3] = {};
+        idx_t vertexIndices[3] = {};
         for (idx_t iTriVert = 0; iTriVert < 3; ++iTriVert)
-            vertices[iTriVert] = indices[IDX_C(3) * iTriangle + iTriVert];
+            vertexIndices[iTriVert] = indices[IDX_C(3) * iTriangle + iTriVert];
         for (idx_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
         {
-            idx_t v = vertices[iTriEdge];
-            idx_t u = vertices[(iTriEdge + 1) % 3];
-            if (v > u) std::swap(v, u);
-            MeshEdge edge = {v, u};
+            idx_t iVert = vertexIndices[iTriEdge];
+            idx_t jVert = vertexIndices[(iTriEdge + 1) % 3];
+            if (iVert > jVert) std::swap(iVert, jVert);
+            MeshEdge edge = {iVert, jVert};
             auto    &vec  = edgeTriangles[edge];
+
+            float3   posi  = vertices[iVert].Position;
+            float3   posj  = vertices[jVert].Position;
+            XMVECTOR posiv = XMLoadFloat3(&posi);
+            XMVECTOR posjv = XMLoadFloat3(&posj);
+            float    len   = XMVectorGetX(XMVector3Length(posjv - posiv));
+
             for (idx_t iOtherTriangle : vec)
             {
                 if (iOtherTriangle == iTriangle) continue;
                 adjncy.push_back(iOtherTriangle);
+                adjwgt.push_back(idx_t(IDX_MAX * len / maxLen));
             }
         }
         xadj.push_back(idx_t(adjncy.size()));
@@ -217,7 +262,7 @@ int main()
                                           adjncy.data(),
                                           nullptr,
                                           nullptr,
-                                          nullptr,
+                                          adjwgt.data(),
                                           &nParts,
                                           nullptr,
                                           nullptr,
@@ -236,16 +281,7 @@ int main()
     ModelCPU outModel;
 
     // Вершины остаются без изменений
-    outModel.Vertices.reserve(nPositions);
-    for (size_t iVert = 0; iVert < nPositions; ++iVert)
-    {
-        unsigned char *pPosition = positionBytes + positionStride * iVert;
-        unsigned char *pNormal   = normalBytes + normalStride * iVert;
-        Vertex         vert      = {};
-        vert.Position            = *reinterpret_cast<float3 *>(pPosition);
-        vert.Normal              = *reinterpret_cast<float3 *>(pNormal);
-        outModel.Vertices.push_back(vert);
-    }
+    outModel.Vertices = vertices;
 
     std::vector<std::vector<idx_t>>     partTriangles(nParts);
     std::vector<std::map<idx_t, idx_t>> partVertexMap(nParts);
