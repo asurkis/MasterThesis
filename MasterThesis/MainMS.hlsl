@@ -26,8 +26,7 @@ TVertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
     TVertexOut vout;
     vout.PositionVS = mul(float4(v.Position, 1), Camera.MatView).xyz;
     vout.PositionHS = mul(float4(v.Position, 1), Camera.MatViewProj);
-    //vout.Normal = mul(float4(v.Normal, 0), Camera.MatNormal).xyz;
-    vout.Normal = 0.xxx;
+    vout.Normal = mul(float4(v.Normal, 0), Camera.MatNormal).xyz;
     vout.MeshletIndex = meshletIndex;
     // vout.Normal       = v.Normal;
 

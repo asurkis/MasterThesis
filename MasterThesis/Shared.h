@@ -19,6 +19,7 @@ struct TCamera
 struct TVertex
 {
     float3 Position;
+    float3 Normal;
 };
 
 struct TMeshlet
