@@ -43,16 +43,16 @@ void ModelCPU::LoadFromFile(const std::filesystem::path &path)
     ReadVec(fin, Meshes);
 
     // Восстанавливаем AABB мешлетов, имеет смысл это сразу сделать на процессоре
-    MeshletAABBs.resize(Meshlets.size());
+    MeshletBoxes.resize(Meshlets.size());
     for (uint meshletId = 0; meshletId < Meshlets.size(); ++meshletId)
     {
         using namespace DirectX;
         const MeshletDesc &meshlet = Meshlets[meshletId];
-        BoundingBox       &aabb    = MeshletAABBs[meshletId];
+        BoundingBox       &aabb    = MeshletBoxes[meshletId];
         if (meshlet.VertCount <= 0)
         {
-            aabb.Min = XMFLOAT3(0.0f, 0.0f, 0.0f);
-            aabb.Max = XMFLOAT3(0.0f, 0.0f, 0.0f);
+            aabb.Min = float3(0.0f, 0.0f, 0.0f);
+            aabb.Max = float3(0.0f, 0.0f, 0.0f);
             continue;
         }
 

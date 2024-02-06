@@ -33,11 +33,12 @@ struct ModelCPU
 
     // Блоки с индексами для мешлетов
     std::vector<uint> GlobalIndices;
-    // Индексы внутри мешлета, 10 бит на каждый из компонент
+
+    // Индексы внутри мешлета, 10 бит на каждую из компонент
     std::vector<uint> LocalIndices;
 
     std::vector<MeshletDesc> Meshlets;
-    std::vector<BoundingBox> MeshletAABBs;
+    std::vector<BoundingBox> MeshletBoxes;
 
     std::vector<MeshDesc> Meshes;
 

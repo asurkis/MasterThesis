@@ -26,6 +26,5 @@
     <None Include="input.glb">
       <Filter>Файлы ресурсов</Filter>
     </None>
-    <None Include=".clang-format" />
   </ItemGroup>
 </Project>
