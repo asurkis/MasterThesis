@@ -1,19 +1,7 @@
 #pragma once
 
 #ifdef __cplusplus
-
-#include <DirectXMath.h>
-
-using uint  = uint32_t;
-using uint2 = DirectX::XMUINT2;
-using uint3 = DirectX::XMUINT3;
-using uint4 = DirectX::XMUINT4;
-
-using float4   = DirectX::XMVECTOR;
-using float4x4 = DirectX::XMMATRIX;
-
-using float3 = DirectX::XMFLOAT3;
-
+#include <BasicTypes.h>
 #endif
 
 #define N_LODS_MAX 6

@@ -33,6 +33,9 @@
     <ClCompile Include="Model.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
+    <ClCompile Include="stdafx.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -58,7 +61,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include=".clang-format" />
     <None Include="MainCommon.hlsli">
       <Filter>Файлы ресурсов\Шейдеры</Filter>
     </None>

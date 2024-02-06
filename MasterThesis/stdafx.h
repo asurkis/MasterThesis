@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Common.h>
+
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
@@ -8,15 +10,6 @@
 #include <d3dx12.h>
 #include <dxgi1_6.h>
 #include <wrl.h>
-
-#include <filesystem>
-#include <fstream>
-#include <iomanip>
-#include <sstream>
-#include <stdexcept>
-#include <vector>
-#include <string_view>
-#include <optional>
 
 #include "imgui.h"
 #include "imgui_impl_dx12.h"
