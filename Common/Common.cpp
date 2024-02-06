@@ -20,7 +20,7 @@ template <typename T> static void ReadVec(std::istream &sin, std::vector<T> &dat
     sin.read(reinterpret_cast<char *>(&size), sizeof(uint));
 
     data.resize(size);
-    sin.read(reinterpret_cast<char *>(data.data()), sizeof(T));
+    sin.read(reinterpret_cast<char *>(data.data()), size * sizeof(T));
 }
 
 void ModelCPU::SaveToFile(const std::filesystem::path &path) const
@@ -28,7 +28,7 @@ void ModelCPU::SaveToFile(const std::filesystem::path &path) const
     std::ofstream fout(path, std::ios::binary);
     WriteVec(fout, Vertices);
     WriteVec(fout, GlobalIndices);
-    WriteVec(fout, LocalIndices);
+    WriteVec(fout, Primitives);
     WriteVec(fout, Meshlets);
     WriteVec(fout, Meshes);
 }
@@ -36,9 +36,10 @@ void ModelCPU::SaveToFile(const std::filesystem::path &path) const
 void ModelCPU::LoadFromFile(const std::filesystem::path &path)
 {
     std::ifstream fin(path, std::ios::binary);
+    size_t        pos1 = fin.tellg();
     ReadVec(fin, Vertices);
     ReadVec(fin, GlobalIndices);
-    ReadVec(fin, LocalIndices);
+    ReadVec(fin, Primitives);
     ReadVec(fin, Meshlets);
     ReadVec(fin, Meshes);
 
@@ -58,10 +59,11 @@ void ModelCPU::LoadFromFile(const std::filesystem::path &path)
 
         aabb.Min = Vertices[meshlet.VertOffset].Position;
         aabb.Max = aabb.Min;
-        for (uint vertId = 1; vertId < meshlet.VertCount; ++vertId)
+        for (uint iMeshletVert = 1; iMeshletVert < meshlet.VertCount; ++iMeshletVert)
         {
-            const Vertex &vert = Vertices[meshlet.VertOffset + vertId];
-            const float3 &pos  = vert.Position;
+            uint          iVert = GlobalIndices[meshlet.VertOffset + iMeshletVert];
+            const Vertex &vert  = Vertices[iVert];
+            const float3 &pos   = vert.Position;
 
             aabb.Min.x = XMMin(aabb.Min.x, pos.x);
             aabb.Min.y = XMMin(aabb.Min.y, pos.y);

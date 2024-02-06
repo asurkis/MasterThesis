@@ -35,7 +35,7 @@ struct ModelCPU
     std::vector<uint> GlobalIndices;
 
     // Индексы внутри мешлета, 10 бит на каждую из компонент
-    std::vector<uint> LocalIndices;
+    std::vector<uint> Primitives;
 
     std::vector<MeshletDesc> Meshlets;
     std::vector<BoundingBox> MeshletBoxes;

@@ -6,12 +6,6 @@
 constexpr D3D_FEATURE_LEVEL NEEDED_FEATURE_LEVEL = D3D_FEATURE_LEVEL_11_0;
 constexpr UINT              FRAME_COUNT          = 3;
 
-void LoadPipeline(UINT width, UINT height);
-void UpdateRenderTargetSize(UINT width, UINT height);
-void WaitForCurFrame();
-void WaitForLastFrame();
-void WaitForAllFrames();
-
 inline ComPtr<ID3D12Device2>              pDevice;
 inline ComPtr<ID3D12CommandQueue>         pCommandQueueDirect;
 inline ComPtr<IDXGISwapChain3>            pSwapChain;
@@ -27,6 +21,13 @@ inline UINT            dsvDescSize;
 inline PResource pRenderTargets[FRAME_COUNT];
 inline PResource pDepthBuffer;
 inline UINT      curFrame = 0;
+
+void LoadPipeline(UINT width, UINT height);
+void UpdateRenderTargetSize(UINT width, UINT height);
+void WaitForCurFrame();
+void WaitForLastFrame();
+void WaitForAllFrames();
+void ExecuteCommandList();
 
 class MeshPipeline
 {
@@ -45,4 +46,20 @@ class MeshPipeline
 
     ID3D12PipelineState *GetStateRaw() const noexcept { return pPipelineState.Get(); }
     ID3D12RootSignature *GetRootSignatureRaw() const noexcept { return pRootSignature.Get(); }
+};
+
+class ModelGPU
+{
+    PResource pVertices;
+    PResource pGlobalIndices;
+    PResource pPrimitives;
+    PResource pMeshlets;
+    PResource pMeshletBoxes;
+
+    // Пока поддерживаем отрисовку только одного меша за раз
+    std::vector<MeshDesc> meshes;
+
+  public:
+    void Upload(const ModelCPU &model);
+    void Render();
 };

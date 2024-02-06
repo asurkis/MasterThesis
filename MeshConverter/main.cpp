@@ -8,7 +8,7 @@
 #include <metis.h>
 #include <tiny_gltf.h>
 
-constexpr bool DBGOUT = false;
+constexpr bool DBGOUT = true;
 
 #if IDXTYPEWIDTH == 32
 #define IDX_C INT32_C
@@ -249,7 +249,7 @@ int main()
         MeshletDesc meshlet = {};
         meshlet.VertOffset  = outModel.GlobalIndices.size();
         meshlet.VertCount   = vertMap.size();
-        meshlet.PrimOffset  = outModel.LocalIndices.size();
+        meshlet.PrimOffset  = outModel.Primitives.size();
         meshlet.PrimCount   = tris.size();
         outModel.Meshlets.push_back(meshlet);
 
@@ -261,9 +261,9 @@ int main()
             {
                 idx_t iGlobVert = indices[IDX_C(3) * iTri + iTriVert];
                 idx_t iLocVert  = vertMap[iGlobVert];
-                prim            = 1024 * prim + iLocVert;
+                prim |= iLocVert << 10 * iTriVert;
             }
-            outModel.LocalIndices.push_back(prim);
+            outModel.Primitives.push_back(prim);
         }
     }
 
@@ -291,11 +291,11 @@ int main()
             std::cout << "GI[" << ii << "] = " << i << "\n";
         }
 
-        std::cout << "\nLocal indices:\n";
-        for (size_t ii = 0; ii < outModel.LocalIndices.size(); ++ii)
+        std::cout << "\nTriangles:\n";
+        for (size_t ii = 0; ii < outModel.Primitives.size(); ++ii)
         {
-            uint i = outModel.LocalIndices[ii];
-            std::cout << "LI[" << ii << "] = " << i << "\n";
+            uint i = outModel.Primitives[ii];
+            std::cout << "T[" << ii << "] = 0x" << std::ios::hex << i << "\n";
         }
 
         std::cout << "\nMeshlets:\n";

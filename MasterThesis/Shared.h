@@ -4,7 +4,7 @@
 #include <BasicTypes.h>
 #endif
 
-#define N_LODS_MAX 6
+#define N_LODS_MAX 1
 #define WAVE_SIZE 32
 #define GROUP_SIZE_AS WAVE_SIZE
 
@@ -16,20 +16,9 @@ struct TCamera
     float4x4 MatNormal;
 };
 
-struct TMeshInfo
-{
-    uint IndexBytes;
-    uint MeshletCount;
-    uint MeshletOffset;
-    // 1 --- highest
-    // 2 --- lowest
-    uint LodBitset;
-};
-
 struct TVertex
 {
     float3 Position;
-    float3 Normal;
 };
 
 struct TMeshlet
@@ -40,11 +29,16 @@ struct TMeshlet
     uint PrimOffset;
 };
 
-struct TMeshletCull
+struct TBoundingBox
 {
-    float4 BoundingSphere;   // xyz = center, w = radius
-    uint   NormalConePacked; // xyz = axis, w = -cos(a + 90)
-    float  ApexOffset;       // apex = center - axis * offset
+    float3 Min;
+    float3 Max;
+};
+
+struct TMesh
+{
+    uint MeshletCount;
+    uint MeshletOffset;
 };
 
 struct TPayload
@@ -62,12 +56,12 @@ struct TPayload
     "SRV(t3),"                                                                                                         \
     "SRV(t4)"
 
-ConstantBuffer<TCamera>   Camera : register(b0);
-ConstantBuffer<TMeshInfo> MeshInfo : register(b1);
+ConstantBuffer<TCamera> Camera : register(b0);
+ConstantBuffer<TMesh>   MeshInfo : register(b1);
 
 StructuredBuffer<TVertex>      Vertices : register(t0);
-StructuredBuffer<TMeshlet>     Meshlets : register(t1);
-ByteAddressBuffer              UniqueVertexIndices : register(t2);
-StructuredBuffer<uint>         PrimitiveIndices : register(t3);
-StructuredBuffer<TMeshletCull> MeshletCulls : register(t4);
+StructuredBuffer<uint>         GlobalIndices : register(t1);
+StructuredBuffer<uint>         Primitives : register(t2);
+StructuredBuffer<TMeshlet>     Meshlets : register(t3);
+StructuredBuffer<TBoundingBox> MeshletBoxes : register(t4);
 #endif

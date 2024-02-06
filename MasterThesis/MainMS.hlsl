@@ -10,30 +10,13 @@ uint3 UnpackPrimitive(uint primitive)
 
 uint3 GetPrimitive(TMeshlet m, uint index)
 {
-    uint prim = PrimitiveIndices[m.PrimOffset + index];
+    uint prim = Primitives[m.PrimOffset + index];
     return UnpackPrimitive(prim);
 }
 
 uint GetVertexIndex(TMeshlet m, uint localIndex)
 {
-    localIndex += m.VertOffset;
-
-    if (MeshInfo.IndexBytes == 4) // 32-bit Vertex Indices
-    {
-        return UniqueVertexIndices.Load(localIndex * 4);
-    }
-    else // 16-bit Vertex Indices
-    {
-        // Byte address must be 4-byte aligned.
-        uint wordOffset = localIndex % 2 * 16;
-        uint byteOffset = localIndex / 2 * 4;
-
-        // Grab the pair of 16-bit indices, shift & mask off proper 16-bits.
-        uint indexPair = UniqueVertexIndices.Load(byteOffset);
-        uint index = (indexPair >> wordOffset) & 0xFFFF;
-
-        return index;
-    }
+    return GlobalIndices[m.VertOffset + localIndex];
 }
 
 TVertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
@@ -43,7 +26,8 @@ TVertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
     TVertexOut vout;
     vout.PositionVS = mul(float4(v.Position, 1), Camera.MatView).xyz;
     vout.PositionHS = mul(float4(v.Position, 1), Camera.MatViewProj);
-    vout.Normal = mul(float4(v.Normal, 0), Camera.MatNormal).xyz;
+    //vout.Normal = mul(float4(v.Normal, 0), Camera.MatNormal).xyz;
+    vout.Normal = 0.xxx;
     vout.MeshletIndex = meshletIndex;
     // vout.Normal       = v.Normal;
 

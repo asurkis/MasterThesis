@@ -1,15 +1,13 @@
 #include "Shared.h"
 
-bool ShouldDisplay(uint meshletIndex)
+bool ShouldDisplay(uint iMeshlet)
 {
     uint i;
     
-    if (meshletIndex >= MeshInfo.MeshletCount)
+    if (iMeshlet >= MeshInfo.MeshletCount)
         return false;
 
-    float4 boundingSphere = MeshletCulls[meshletIndex].BoundingSphere;
-    float3 centerVS = mul(float4(boundingSphere.xyz, 1), Camera.MatView).xyz;
-    float4 centerHS = mul(float4(boundingSphere.xyz, 1), Camera.MatViewProj);
+    TBoundingBox box = MeshletBoxes[iMeshlet];
     
     bool culledByPlane[6];
     for (i = 0; i < 6; ++i)
@@ -17,12 +15,11 @@ bool ShouldDisplay(uint meshletIndex)
     
     for (i = 0; i < 8; ++i)
     {
-        float3 shift;
-        shift.x = i & 1 ? 1 : -1;
-        shift.y = i & 2 ? 1 : -1;
-        shift.z = i & 4 ? 1 : -1;
+        float3 ogPos;
+        ogPos.x = i & 1 ? box.Max.x : box.Min.x;
+        ogPos.y = i & 2 ? box.Max.y : box.Min.y;
+        ogPos.z = i & 4 ? box.Max.z : box.Min.z;
         
-        float3 ogPos = boundingSphere.xyz + boundingSphere.w * shift;
         float4 hs = mul(float4(ogPos, 1), Camera.MatViewProj);
         culledByPlane[0] &= hs.w <= 0;
         culledByPlane[1] &= hs.z > hs.w;
@@ -37,16 +34,6 @@ bool ShouldDisplay(uint meshletIndex)
         if (culledByPlane[i])
             return false;
     }
-    
-    float radiusProj = boundingSphere.w / centerHS.w;
-    bool cullable = radiusProj < 0.1;
-    bool parentCullable = radiusProj < 0.2;
-    bool isHighestLevel = MeshInfo.LodBitset & 1;
-    bool isLowestLevel = MeshInfo.LodBitset & 2;
-    if (!isLowestLevel && cullable)
-        return false;
-    if (!isHighestLevel && !parentCullable)
-        return false;
     
     return true;
 }

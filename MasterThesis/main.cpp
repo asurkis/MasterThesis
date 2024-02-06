@@ -34,7 +34,7 @@ bool drawMeshletAABB = false;
 TCamera   CameraCB;
 PResource pCameraGPU;
 
-Model models[N_LODS_MAX];
+ModelGPU model;
 
 void LoadAssets()
 {
@@ -64,18 +64,9 @@ void LoadAssets()
                                                        IID_PPV_ARGS(&pCameraGPU)));
     }
 
-    for (int i = 0; i < N_LODS_MAX; ++i)
-    {
-        std::ostringstream oss;
-        oss << "Dragon_LOD" << i << ".bin";
-        std::filesystem::path dragonPath = assetPath / oss.str();
-        // std::filesystem::path dragonPath = assetPath / "Dragon_LOD5.bin";
-        ThrowIfFailed(models[i].LoadFromFile(dragonPath.c_str()));
-        ThrowIfFailed(models[i].UploadGpuResources(pDevice.Get(),
-                                                   pCommandQueueDirect.Get(),
-                                                   pCommandAllocator.Get(),
-                                                   pCommandList.Get()));
-    }
+    ModelCPU modelCpu;
+    modelCpu.LoadFromFile("model.bin");
+    model.Upload(modelCpu);
 }
 
 class RaiiImgui
@@ -113,35 +104,6 @@ class RaiiImgui
 };
 
 std::optional<RaiiImgui> raiiImgui;
-
-void RenderModel(int modelId)
-{
-    bool isLowestLevel  = modelId == N_LODS_MAX - 1;
-    bool isHighestLevel = modelId == 0;
-    uint lodInfo        = (isHighestLevel ? 1 : 0) | (isLowestLevel ? 2 : 0);
-
-    const Model &model = models[modelId];
-    for (uint32_t meshId = 0; meshId < model.GetMeshCount(); ++meshId)
-    {
-        auto &mesh = model.GetMesh(meshId);
-        pCommandList->SetGraphicsRoot32BitConstant(1, mesh.IndexSize, 0);
-        pCommandList->SetGraphicsRoot32BitConstant(1, mesh.Meshlets.size(), 1);
-        pCommandList->SetGraphicsRoot32BitConstant(1, lodInfo, 3);
-        pCommandList->SetGraphicsRootShaderResourceView(2, mesh.VertexResources[0]->GetGPUVirtualAddress());
-        pCommandList->SetGraphicsRootShaderResourceView(3, mesh.MeshletResource->GetGPUVirtualAddress());
-        pCommandList->SetGraphicsRootShaderResourceView(4, mesh.UniqueVertexIndexResource->GetGPUVirtualAddress());
-        pCommandList->SetGraphicsRootShaderResourceView(5, mesh.PrimitiveIndexResource->GetGPUVirtualAddress());
-        pCommandList->SetGraphicsRootShaderResourceView(6, mesh.CullDataResource->GetGPUVirtualAddress());
-
-        for (size_t subsetId = 0; subsetId < mesh.MeshletSubsets.size(); ++subsetId)
-        {
-            auto &subset = mesh.MeshletSubsets[subsetId];
-            pCommandList->SetGraphicsRoot32BitConstant(1, subset.Offset, 2);
-            uint nDispatch = (subset.Count + GROUP_SIZE_AS - 1) / GROUP_SIZE_AS;
-            pCommandList->DispatchMesh(nDispatch, 1, 1);
-        }
-    }
-}
 
 void FillCommandList()
 {
@@ -183,15 +145,12 @@ void FillCommandList()
 
     pCommandList->SetGraphicsRootSignature(mainPipeline.GetRootSignatureRaw());
     pCommandList->SetGraphicsRootConstantBufferView(0, pCameraGPU->GetGPUVirtualAddress());
-    if (drawModel)
-    {
-        for (int i = 0; i < N_LODS_MAX; ++i) RenderModel(i);
-    }
+    if (drawModel) { model.Render(); }
 
-    pCommandList->SetPipelineState(aabbPipeline.GetStateRaw());
     if (drawMeshletAABB)
     {
-        for (int i = 0; i < N_LODS_MAX; ++i) RenderModel(i);
+        pCommandList->SetPipelineState(aabbPipeline.GetStateRaw());
+        model.Render();
     }
 
     ImGui::Render();
@@ -297,9 +256,8 @@ void OnRender()
     pCameraGPU->Unmap(0, nullptr);
 
     FillCommandList();
+    ExecuteCommandList();
 
-    ID3D12CommandList *ppCommandLists[] = {pCommandList.Get()};
-    pCommandQueueDirect->ExecuteCommandLists(1, ppCommandLists);
     if (useVSync)
         ThrowIfFailed(pSwapChain->Present(1, 0));
     else
@@ -316,32 +274,32 @@ int WINAPI wWinMain(_In_ HINSTANCE     hCurInstance,
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     hInstance = hCurInstance;
 
-    try
+    // try
+    //{
+    RaiiMainWindow raiiMainWindow;
+
+    LoadPipeline(WindowWidth, WindowHeight);
+    LoadAssets();
+    raiiImgui.emplace();
+    WaitForAllFrames();
+
+    ShowWindow(hWnd, nShowCmd);
+
+    MSG msg = {};
+    while (GetMessageW(&msg, HWND_DESKTOP, 0, 0))
     {
-        RaiiMainWindow raiiMainWindow;
-
-        LoadPipeline(WindowWidth, WindowHeight);
-        LoadAssets();
-        raiiImgui.emplace();
-        WaitForAllFrames();
-
-        ShowWindow(hWnd, nShowCmd);
-
-        MSG msg = {};
-        while (GetMessageW(&msg, HWND_DESKTOP, 0, 0))
-        {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-
-        WaitForAllFrames();
-        return int(msg.wParam);
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
     }
-    catch (const std::runtime_error &err)
-    {
-        MessageBoxA(HWND_DESKTOP, err.what(), "Error", MB_ICONERROR | MB_OK);
-        return -1;
-    }
+
+    WaitForAllFrames();
+    return int(msg.wParam);
+    //}
+    // catch (const std::runtime_error &err)
+    //{
+    //    MessageBoxA(HWND_DESKTOP, err.what(), "Error", MB_ICONERROR | MB_OK);
+    //    return -1;
+    //}
 }
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);

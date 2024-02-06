@@ -1,5 +1,6 @@
 #include "stdafx.h"
 
+#include "Shared.h"
 #include "UtilD3D.h"
 
 bool useWarpDevice = false;
@@ -218,6 +219,12 @@ void WaitForAllFrames()
     for (UINT i = 0; i < FRAME_COUNT; ++i) WaitForFrame(i);
 }
 
+void ExecuteCommandList()
+{
+    ID3D12CommandList *ppCommandLists[] = {pCommandList.Get()};
+    pCommandQueueDirect->ExecuteCommandLists(1, ppCommandLists);
+}
+
 void UpdateRenderTargetSize(UINT width, UINT height)
 {
     width  = max(1, width);
@@ -291,4 +298,89 @@ void MeshPipeline::Load(const std::filesystem::path &pathMS,
     std::vector<BYTE> dataPS = ReadFile(pathPS);
     std::vector<BYTE> dataAS = ReadFile(pathAS);
     LoadBytecode(dataAS, dataMS, dataPS);
+}
+
+template <typename T>
+static void QueryUploadVector(const std::vector<T> &data, PResource *outBuffer, PResource *outUpload)
+{
+    size_t dataSize = sizeof(T) * data.size();
+    UINT64 bufWidth = (dataSize + 3) / 4 * 4;
+    auto   bufDesc  = CD3DX12_RESOURCE_DESC::Buffer(bufWidth);
+
+    auto defaultHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+    ThrowIfFailed(pDevice->CreateCommittedResource(&defaultHeap,
+                                                   D3D12_HEAP_FLAG_NONE,
+                                                   &bufDesc,
+                                                   D3D12_RESOURCE_STATE_COPY_DEST,
+                                                   nullptr,
+                                                   IID_PPV_ARGS(&*outBuffer)));
+
+    auto uploadHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+    ThrowIfFailed(pDevice->CreateCommittedResource(&uploadHeap,
+                                                   D3D12_HEAP_FLAG_NONE,
+                                                   &bufDesc,
+                                                   D3D12_RESOURCE_STATE_GENERIC_READ,
+                                                   nullptr,
+                                                   IID_PPV_ARGS(&*outUpload)));
+
+    void *memory = nullptr;
+    ThrowIfFailed((*outUpload)->Map(0, nullptr, &memory));
+    std::memcpy(memory, data.data(), dataSize);
+    (*outUpload)->Unmap(0, nullptr);
+
+    pCommandList->CopyResource(outBuffer->Get(), outUpload->Get());
+    auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(outBuffer->Get(),
+                                                        D3D12_RESOURCE_STATE_COPY_DEST,
+                                                        D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
+    pCommandList->ResourceBarrier(1, &barrier);
+}
+
+void ModelGPU::Upload(const ModelCPU &model)
+{
+    PResource pUploadVertices;
+    PResource pUploadGlobalIndices;
+    PResource pUploadPrimitives;
+    PResource pUploadMeshlets;
+    PResource pUploadMeshletBoxes;
+
+    meshes = model.Meshes;
+
+    ThrowIfFailed(pCommandList->Reset(pCommandAllocator.Get(), nullptr));
+    QueryUploadVector(model.Vertices, &pVertices, &pUploadVertices);
+    QueryUploadVector(model.GlobalIndices, &pGlobalIndices, &pUploadGlobalIndices);
+    QueryUploadVector(model.Primitives, &pPrimitives, &pUploadPrimitives);
+    QueryUploadVector(model.Meshlets, &pMeshlets, &pUploadMeshlets);
+    QueryUploadVector(model.MeshletBoxes, &pMeshletBoxes, &pUploadMeshletBoxes);
+    ThrowIfFailed(pCommandList->Close());
+    ExecuteCommandList();
+
+    PFence pFence;
+    ThrowIfFailed(pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&pFence)));
+    pCommandQueueDirect->Signal(pFence.Get(), 1);
+
+    if (pFence->GetCompletedValue() != 1)
+    {
+        RaiiHandle hEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (!hEvent.Get()) ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
+        pFence->SetEventOnCompletion(1, hEvent.Get());
+        WaitForSingleObjectEx(hEvent.Get(), INFINITE, FALSE);
+    }
+}
+
+void ModelGPU::Render()
+{
+    for (uint iMesh = 0; iMesh < meshes.size(); ++iMesh)
+    {
+        MeshDesc &mesh = meshes[iMesh];
+        pCommandList->SetGraphicsRoot32BitConstant(1, mesh.MeshletCount, 0);
+        pCommandList->SetGraphicsRoot32BitConstant(1, mesh.MeshletOffset, 1);
+        pCommandList->SetGraphicsRootShaderResourceView(2, pVertices->GetGPUVirtualAddress());
+        pCommandList->SetGraphicsRootShaderResourceView(3, pGlobalIndices->GetGPUVirtualAddress());
+        pCommandList->SetGraphicsRootShaderResourceView(4, pPrimitives->GetGPUVirtualAddress());
+        pCommandList->SetGraphicsRootShaderResourceView(5, pMeshlets->GetGPUVirtualAddress());
+        pCommandList->SetGraphicsRootShaderResourceView(6, pMeshletBoxes->GetGPUVirtualAddress());
+
+        uint nDispatch = (mesh.MeshletCount + GROUP_SIZE_AS - 1) / GROUP_SIZE_AS;
+        pCommandList->DispatchMesh(nDispatch, 1, 1);
+    }
 }
