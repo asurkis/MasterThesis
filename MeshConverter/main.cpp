@@ -28,7 +28,7 @@ int main()
     tinygltf::TinyGLTF tinyGltfCtx;
     std::string        err;
     std::string        warn;
-    bool               success = tinyGltfCtx.LoadBinaryFromFile(&inModel, &err, &warn, "input.glb");
+    bool               success = tinyGltfCtx.LoadBinaryFromFile(&inModel, &err, &warn, "model.glb");
     if (!err.empty()) std::cerr << err << '\n';
     if (!warn.empty()) std::cerr << warn << '\n';
     if (!success) throw std::runtime_error("Fail");
@@ -191,7 +191,7 @@ int main()
     }
 
     // Готовим структуру для первого вызова METIS
-    constexpr uint TARGET_PRIMITIVES = MESHLET_MAX_PRIMITIVES * 7 / 8;
+    constexpr uint TARGET_PRIMITIVES = MESHLET_MAX_PRIMITIVES * 3 / 4;
 
     idx_t nParts = idx_t((nTriangles + TARGET_PRIMITIVES - 1) / TARGET_PRIMITIVES);
     nParts       = std::max(nParts, IDX_C(2));
@@ -259,19 +259,19 @@ int main()
 
     // Для разделения кроме первой фазы нужно будет
     // использовать графы
-    int metisResult = METIS_PartGraphRecursive(&nvtxs,
-                                               &ncon,
-                                               xadj.data(),
-                                               adjncy.data(),
-                                               nullptr,
-                                               nullptr,
-                                               adjwgt.data(),
-                                               &nParts,
-                                               nullptr,
-                                               nullptr,
-                                               options,
-                                               &edgecut,
-                                               trianglePart.data());
+    int metisResult = METIS_PartGraphKway(&nvtxs,
+                                          &ncon,
+                                          xadj.data(),
+                                          adjncy.data(),
+                                          nullptr,
+                                          nullptr,
+                                          adjwgt.data(),
+                                          &nParts,
+                                          nullptr,
+                                          nullptr,
+                                          options,
+                                          &edgecut,
+                                          trianglePart.data());
     if (metisResult != METIS_OK) throw std::runtime_error("METIS failed");
 
     if constexpr (DBGOUT)
@@ -347,7 +347,7 @@ int main()
     outMesh.MeshletOffset = 0;
     outModel.Meshes.push_back(outMesh);
 
-    outModel.SaveToFile("../MasterThesis/model.bin");
+    outModel.SaveToFile("../MasterThesis/model1.bin");
 
     if constexpr (DBGOUT)
     {

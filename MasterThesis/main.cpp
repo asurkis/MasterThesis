@@ -77,7 +77,7 @@ void LoadAssets()
     }
 
     ModelCPU modelCpu;
-    modelCpu.LoadFromFile("model.bin");
+    modelCpu.LoadFromFile("model1.bin");
     model.Upload(modelCpu);
 }
 

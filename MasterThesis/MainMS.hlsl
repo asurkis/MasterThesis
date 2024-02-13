@@ -41,7 +41,7 @@ void main(
     uint gid : SV_GroupID,
     uint gtid : SV_GroupThreadID,
     out indices uint3 tris[128],
-    out vertices TVertexOut verts[192])
+    out vertices TVertexOut verts[256])
 {
     uint meshletIndex = Payload.MeshletIndex[gid];
     TMeshlet m = Meshlets[meshletIndex];
