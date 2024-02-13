@@ -135,7 +135,7 @@ int main()
         idx_t iVert = 0;
         // little endian
         for (int indexByteOff = 0; indexByteOff < indexComponentSize; ++indexByteOff)
-            iVert += indexBytes[indexComponentSize * iiVert + indexByteOff] << 8 * indexByteOff;
+            iVert += (idx_t)indexBytes[indexComponentSize * iiVert + indexByteOff] << 8 * indexByteOff;
         indices[iiVert] = iVert;
     }
 
@@ -191,8 +191,13 @@ int main()
     }
 
     // Готовим структуру для первого вызова METIS
-    idx_t              nvtxs = idx_t(nTriangles);
-    idx_t              ncon  = 1;
+    constexpr uint TARGET_PRIMITIVES = MESHLET_MAX_PRIMITIVES * 7 / 8;
+
+    idx_t nParts = idx_t((nTriangles + TARGET_PRIMITIVES - 1) / TARGET_PRIMITIVES);
+    nParts       = std::max(nParts, IDX_C(2));
+    idx_t nvtxs  = nTriangles;
+
+    idx_t              ncon = 1;
     std::vector<idx_t> xadj;
     xadj.reserve(size_t(nvtxs) + 1);
     xadj.push_back(0);
@@ -225,14 +230,12 @@ int main()
             {
                 if (iOtherTriangle == iTriangle) continue;
                 adjncy.push_back(iOtherTriangle);
-                adjwgt.push_back(idx_t(IDX_MAX * len / maxLen));
+                adjwgt.push_back(idx_t(IDX_C(0x7FFFFFFF) * len / maxLen));
             }
         }
         xadj.push_back(idx_t(adjncy.size()));
     }
-
-    idx_t nParts = idx_t((nTriangles + 63) / 64);
-    nParts       = std::max(nParts, IDX_C(2));
+    for (idx_t i = nTriangles; i < nvtxs; ++i) xadj.push_back(idx_t(adjncy.size()));
 
     idx_t              edgecut = 0;
     std::vector<idx_t> trianglePart(nvtxs, 0);
@@ -256,19 +259,19 @@ int main()
 
     // Для разделения кроме первой фазы нужно будет
     // использовать графы
-    int metisResult = METIS_PartGraphKway(&nvtxs,
-                                          &ncon,
-                                          xadj.data(),
-                                          adjncy.data(),
-                                          nullptr,
-                                          nullptr,
-                                          adjwgt.data(),
-                                          &nParts,
-                                          nullptr,
-                                          nullptr,
-                                          options,
-                                          &edgecut,
-                                          trianglePart.data());
+    int metisResult = METIS_PartGraphRecursive(&nvtxs,
+                                               &ncon,
+                                               xadj.data(),
+                                               adjncy.data(),
+                                               nullptr,
+                                               nullptr,
+                                               adjwgt.data(),
+                                               &nParts,
+                                               nullptr,
+                                               nullptr,
+                                               options,
+                                               &edgecut,
+                                               trianglePart.data());
     if (metisResult != METIS_OK) throw std::runtime_error("METIS failed");
 
     if constexpr (DBGOUT)
@@ -296,6 +299,16 @@ int main()
         {
             idx_t iVert = indices[IDX_C(3) * iTriangle + iTriVert];
             verts.try_emplace(iVert, idx_t(verts.size()));
+        }
+    }
+
+    if constexpr (true)
+    {
+        for (size_t iPart = 0; iPart < nParts; ++iPart)
+        {
+            auto &part = partTriangles[iPart];
+            if (part.size() > MESHLET_MAX_PRIMITIVES)
+                std::cout << "Part[" << iPart << "].size() = " << part.size() << "\n";
         }
     }
 

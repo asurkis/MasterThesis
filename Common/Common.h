@@ -2,6 +2,8 @@
 
 #include "stdafx.h"
 
+constexpr uint MESHLET_MAX_PRIMITIVES = 128;
+
 struct Vertex
 {
     float3 Position;

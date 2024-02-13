@@ -90,6 +90,7 @@
     </Link>
     <FxCompile>
       <ShaderModel>6.5</ShaderModel>
+      <AdditionalIncludeDirectories>$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -112,6 +113,7 @@
     </Link>
     <FxCompile>
       <ShaderModel>6.5</ShaderModel>
+      <AdditionalIncludeDirectories>$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -131,6 +133,7 @@
     </Link>
     <FxCompile>
       <ShaderModel>6.5</ShaderModel>
+      <AdditionalIncludeDirectories>$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -153,6 +156,7 @@
     </Link>
     <FxCompile>
       <ShaderModel>6.5</ShaderModel>
+      <AdditionalIncludeDirectories>$(SolutionDir)Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -168,7 +172,6 @@
     <ClCompile Include="UtilWin32.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Shared.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="DXSampleHelper.h" />
     <ClInclude Include="Model.h" />
@@ -197,14 +200,9 @@
     </CopyFileToFolders>
     <None Include="AABB_Common.hlsli" />
     <None Include="MainCommon.hlsli" />
+    <None Include="Util.hlsli" />
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="AABB_AS.hlsl">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Amplification</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Amplification</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Amplification</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Amplification</ShaderType>
-    </FxCompile>
     <FxCompile Include="AABB_MS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Mesh</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Mesh</ShaderType>

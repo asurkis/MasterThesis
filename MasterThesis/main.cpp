@@ -1,7 +1,6 @@
 #include "stdafx.h"
 
 #include "Model.h"
-#include "Shared.h"
 #include "UtilD3D.h"
 #include "UtilWin32.h"
 #include <DirectXMath.h>
@@ -23,15 +22,28 @@ UINT            srvDescSize;
 MeshPipeline mainPipeline;
 MeshPipeline aabbPipeline;
 
-XMVECTOR camPos   = XMVectorSet(-100.0f, 80.0f, 150.0f, 0.0f);
+// XMVECTOR camPos   = XMVectorSet(-100.0f, 80.0f, 150.0f, 0.0f);
+// float    camRotX  = XMConvertToRadians(0.0f);
+// float    camRotY  = XMConvertToRadians(135.0f);
+// float    camSpeed = 50.0f;
+
+XMVECTOR camPos   = XMVectorSet(0.0f, 0.0f, -3.0f, 0.0f);
 float    camRotX  = XMConvertToRadians(0.0f);
-float    camRotY  = XMConvertToRadians(135.0f);
-float    camSpeed = 50.0f;
+float    camRotY  = XMConvertToRadians(0.0f);
+float    camSpeed = 10.0f;
 
 bool drawModel       = true;
 bool drawMeshletAABB = false;
 
-TCamera   CameraCB;
+struct Camera
+{
+    float4x4 MatView;
+    float4x4 MatProj;
+    float4x4 MatViewProj;
+    float4x4 MatNormal;
+};
+
+Camera    CameraCB;
 PResource pCameraGPU;
 
 ModelGPU model;

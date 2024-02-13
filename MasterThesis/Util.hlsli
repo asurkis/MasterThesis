@@ -1,10 +1,5 @@
 #pragma once
 
-#ifdef __cplusplus
-#include <BasicTypes.h>
-#endif
-
-#define N_LODS_MAX 1
 #define WAVE_SIZE 32
 #define GROUP_SIZE_AS WAVE_SIZE
 
@@ -47,7 +42,6 @@ struct TPayload
     uint MeshletIndex[GROUP_SIZE_AS];
 };
 
-#ifndef __cplusplus
 #define ROOT_SIG                                                                                                       \
     "CBV(b0),"                                                                                                         \
     "RootConstants(b1, num32bitconstants=4),"                                                                          \
@@ -58,11 +52,21 @@ struct TPayload
     "SRV(t4)"
 
 ConstantBuffer<TCamera> Camera : register(b0);
-ConstantBuffer<TMesh>   MeshInfo : register(b1);
+ConstantBuffer<TMesh> MeshInfo : register(b1);
 
-StructuredBuffer<TVertex>      Vertices : register(t0);
-StructuredBuffer<uint>         GlobalIndices : register(t1);
-StructuredBuffer<uint>         Primitives : register(t2);
-StructuredBuffer<TMeshlet>     Meshlets : register(t3);
+StructuredBuffer<TVertex> Vertices : register(t0);
+StructuredBuffer<uint> GlobalIndices : register(t1);
+StructuredBuffer<uint> Primitives : register(t2);
+StructuredBuffer<TMeshlet> Meshlets : register(t3);
 StructuredBuffer<TBoundingBox> MeshletBoxes : register(t4);
-#endif
+
+float3 PaletteColor(uint idx)
+{
+    // float3(float(meshletIndex & 1), float(meshletIndex & 3) / 4, float(meshletIndex & 7) / 8)
+    // 0b_0010_0100_1001_0010_0100_1001_0010_0100_1001 = 0x249249249
+    uint3 t = uint3(idx, idx >> 1, idx >> 2);
+    uint3 c = 0.xxx;
+    for (uint i = 0; i < 11; ++i)
+        c |= ((t >> (3 * i)) & 1) << (10 - i);
+    return float3(c) / 2047.0;
+}

@@ -56,15 +56,15 @@
     <ClInclude Include="Span.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
-    <ClInclude Include="Shared.h">
-      <Filter>Файлы заголовков</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="MainCommon.hlsli">
       <Filter>Файлы ресурсов\Шейдеры</Filter>
     </None>
     <None Include="AABB_Common.hlsli">
+      <Filter>Файлы ресурсов\Шейдеры</Filter>
+    </None>
+    <None Include="Util.hlsli">
       <Filter>Файлы ресурсов\Шейдеры</Filter>
     </None>
   </ItemGroup>
@@ -79,9 +79,6 @@
       <Filter>Файлы ресурсов\Шейдеры</Filter>
     </FxCompile>
     <FxCompile Include="MainPS.hlsl">
-      <Filter>Файлы ресурсов\Шейдеры</Filter>
-    </FxCompile>
-    <FxCompile Include="AABB_AS.hlsl">
       <Filter>Файлы ресурсов\Шейдеры</Filter>
     </FxCompile>
     <FxCompile Include="MainAS.hlsl">

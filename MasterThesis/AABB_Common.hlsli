@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Shared.h"
+#include "Util.hlsli"
 
 struct VertexOut
 {

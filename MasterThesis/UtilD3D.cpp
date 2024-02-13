@@ -1,6 +1,5 @@
 #include "stdafx.h"
 
-#include "Shared.h"
 #include "UtilD3D.h"
 
 bool useWarpDevice = false;
@@ -379,6 +378,8 @@ void ModelGPU::Render()
         pCommandList->SetGraphicsRootShaderResourceView(4, pPrimitives->GetGPUVirtualAddress());
         pCommandList->SetGraphicsRootShaderResourceView(5, pMeshlets->GetGPUVirtualAddress());
         pCommandList->SetGraphicsRootShaderResourceView(6, pMeshletBoxes->GetGPUVirtualAddress());
+
+        constexpr uint GROUP_SIZE_AS = 32;
 
         uint nDispatch = (mesh.MeshletCount + GROUP_SIZE_AS - 1) / GROUP_SIZE_AS;
         pCommandList->DispatchMesh(nDispatch, 1, 1);

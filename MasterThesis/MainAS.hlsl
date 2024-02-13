@@ -1,4 +1,4 @@
-#include "Shared.h"
+#include "Util.hlsli"
 
 bool ShouldDisplay(uint iMeshlet)
 {
