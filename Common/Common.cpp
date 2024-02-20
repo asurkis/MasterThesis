@@ -35,6 +35,8 @@ void ModelCPU::SaveToFile(const std::filesystem::path &path) const
 
 void ModelCPU::LoadFromFile(const std::filesystem::path &path)
 {
+    using namespace DirectX;
+
     std::ifstream fin(path, std::ios::binary);
     size_t        pos1 = fin.tellg();
     ReadVec(fin, Vertices);
@@ -45,11 +47,10 @@ void ModelCPU::LoadFromFile(const std::filesystem::path &path)
 
     // Восстанавливаем AABB мешлетов, имеет смысл это сразу сделать на процессоре
     MeshletBoxes.resize(Meshlets.size());
-    for (uint meshletId = 0; meshletId < Meshlets.size(); ++meshletId)
+    for (uint iMeshlet = 0; iMeshlet < Meshlets.size(); ++iMeshlet)
     {
-        using namespace DirectX;
-        const MeshletDesc &meshlet = Meshlets[meshletId];
-        BoundingBox       &aabb    = MeshletBoxes[meshletId];
+        const MeshletDesc &meshlet = Meshlets[iMeshlet];
+        BoundingBox       &aabb    = MeshletBoxes[iMeshlet];
         if (meshlet.VertCount <= 0)
         {
             aabb.Min = float3(0.0f, 0.0f, 0.0f);
@@ -72,6 +73,28 @@ void ModelCPU::LoadFromFile(const std::filesystem::path &path)
             aabb.Max.x = XMMax(aabb.Max.x, pos.x);
             aabb.Max.y = XMMax(aabb.Max.y, pos.y);
             aabb.Max.z = XMMax(aabb.Max.z, pos.z);
+        }
+    }
+
+    for (size_t iMeshlet = 0; iMeshlet < Meshlets.size(); ++iMeshlet)
+    {
+        const MeshletDesc &meshlet = Meshlets[iMeshlet];
+        const BoundingBox &aabb    = MeshletBoxes[iMeshlet];
+        // Восстанавливаем AABB родителя
+        uint iParent = meshlet.Parent1;
+        if (iParent != 0)
+        {
+            if (iParent <= iMeshlet || iParent >= Meshlets.size())
+                throw std::runtime_error("Incorrect Parent1");
+            BoundingBox &aabbParent = MeshletBoxes[iParent];
+
+            aabbParent.Min.x = XMMin(aabbParent.Min.x, aabb.Min.x);
+            aabbParent.Min.y = XMMin(aabbParent.Min.y, aabb.Min.y);
+            aabbParent.Min.z = XMMin(aabbParent.Min.z, aabb.Min.z);
+            aabbParent.Max.x = XMMax(aabbParent.Max.x, aabb.Max.x);
+            aabbParent.Max.y = XMMax(aabbParent.Max.y, aabb.Max.y);
+            aabbParent.Max.z = XMMax(aabbParent.Max.z, aabb.Max.z);
+            Meshlets[iParent].ChildrenCount++;
         }
     }
 }

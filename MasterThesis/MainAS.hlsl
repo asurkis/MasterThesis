@@ -1,13 +1,8 @@
 #include "Util.hlsli"
 
-bool ShouldDisplay(uint iMeshlet)
+bool IsCulled(TBoundingBox box)
 {
     uint i;
-    
-    if (iMeshlet >= MeshInfo.MeshletCount)
-        return false;
-
-    TBoundingBox box = MeshletBoxes[iMeshlet];
     
     bool culledByPlane[6];
     for (i = 0; i < 6; ++i)
@@ -32,10 +27,45 @@ bool ShouldDisplay(uint iMeshlet)
     for (i = 0; i < 6; ++i)
     {
         if (culledByPlane[i])
+            return true;
+    }
+    
+    return false;
+}
+
+bool IsEnough(TBoundingBox box)
+{
+    float3 center = 0.5 * (box.Min + box.Max);
+    float diameter = length(box.Max - box.Min);
+    float4 hs = mul(float4(center, 1), Camera.MatViewProj);
+    if (hs.w <= 0)
+        return true;
+    float r = diameter / hs.w;
+    return r < 0.25;
+}
+
+bool ShouldDisplay(uint iMeshlet)
+{
+    if (iMeshlet >= MeshInfo.MeshletCount)
+        return false;
+    
+    TMeshlet meshlet = Meshlets[iMeshlet];
+    uint iParent = meshlet.Parent1;
+    bool isRoot = iParent == 0;
+    bool isLeaf = meshlet.ChildrenCount == 0;
+    if (!isRoot)
+    {
+        TBoundingBox parentBox = MeshletBoxes[iParent];
+        if (IsCulled(parentBox))
+            return false;
+        if (IsEnough(parentBox))
             return false;
     }
     
-    return true;
+    TBoundingBox box = MeshletBoxes[iMeshlet];
+    if (IsCulled(box))
+        return false;
+    return isLeaf || IsEnough(box);
 }
 
 [numthreads(GROUP_SIZE_AS, 1, 1)]
@@ -44,8 +74,8 @@ void main(
     uint gtid : SV_GroupThreadID,
     uint gid : SV_GroupID)
 {
-    uint meshletIndex = MeshInfo.MeshletOffset + dtid;
-    bool shouldDisplay = ShouldDisplay(meshletIndex);
+    uint iMeshlet = MeshInfo.MeshletOffset + dtid;
+    bool shouldDisplay = ShouldDisplay(iMeshlet);
     
     uint current = WavePrefixCountBits(shouldDisplay);
     uint nDispatch = WaveActiveCountBits(shouldDisplay);
@@ -53,7 +83,7 @@ void main(
     TPayload p;
     if (shouldDisplay)
     {
-        p.MeshletIndex[current] = meshletIndex;
+        p.MeshletIndex[current] = iMeshlet;
     }
     DispatchMesh(nDispatch, 1, 1, p);
 }

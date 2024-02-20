@@ -43,8 +43,9 @@ void main(
     out indices uint3 tris[128],
     out vertices TVertexOut verts[256])
 {
-    uint meshletIndex = Payload.MeshletIndex[gid];
-    TMeshlet m = Meshlets[meshletIndex];
+    uint iMeshlet = Payload.MeshletIndex[gid];
+    TMeshlet m = Meshlets[iMeshlet];
+    uint iParent = m.Parent1;
     SetMeshOutputCounts(m.VertCount, m.PrimCount);
 
     if (gtid < m.PrimCount)
@@ -57,13 +58,13 @@ void main(
     if (iLocVert < m.VertCount)
     {
         uint iVert = GetVertexIndex(m, iLocVert);
-        verts[iLocVert] = GetVertexAttributes(meshletIndex, iVert);
+        verts[iLocVert] = GetVertexAttributes(iMeshlet, iVert);
     }
     
     iLocVert = gtid + 128;
     if (iLocVert < m.VertCount)
     {
         uint iVert = GetVertexIndex(m, iLocVert);
-        verts[iLocVert] = GetVertexAttributes(meshletIndex, iVert);
+        verts[iLocVert] = GetVertexAttributes(iMeshlet, iVert);
     }
 }

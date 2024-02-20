@@ -23,6 +23,16 @@ struct TMeshlet
     uint VertOffset;
     uint PrimCount;
     uint PrimOffset;
+    uint ChildrenOffset;
+    uint ChildrenCount;
+    uint Parent1;
+    uint Parent2;
+};
+
+struct TMeshletNode
+{
+    uint ChildrenOffset;
+    uint ChildrenCount;
     uint Parent1;
     uint Parent2;
 };

@@ -62,7 +62,7 @@ void LoadAssets()
     }
 
     mainPipeline.Load(assetPath / "MainMS.cso", assetPath / "MainPS.cso", assetPath / "MainAS.cso");
-    aabbPipeline.Load(assetPath / "AABB_MS.cso", assetPath / "AABB_PS.cso", assetPath / "AABB_AS.cso");
+    aabbPipeline.Load(assetPath / "AABB_MS.cso", assetPath / "AABB_PS.cso", assetPath / "MainAS.cso");
 
     {
         UINT                    camBufSize = sizeof(CameraCB);
