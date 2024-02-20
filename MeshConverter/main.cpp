@@ -13,160 +13,163 @@ using namespace DirectX;
 constexpr bool DBGOUT = false;
 
 #if IDXTYPEWIDTH == 32
-#define IDX_C INT32_C
+#define IDX_C(x) INT32_C(x)
 #elif IDXTYPEWIDTH == 64
-#define IDX_C INT64_C
+#define IDX_C(x) INT64_C(x)
 #else
 #error "IDTYPEWIDTH not set"
 #endif
 
 using MeshEdge = std::pair<idx_t, idx_t>;
 
-int main()
+struct OriginalMesh
 {
-    tinygltf::Model    inModel;
-    tinygltf::TinyGLTF tinyGltfCtx;
-    std::string        err;
-    std::string        warn;
-    bool               success = tinyGltfCtx.LoadBinaryFromFile(&inModel, &err, &warn, "model.glb");
-    if (!err.empty()) std::cerr << err << '\n';
-    if (!warn.empty()) std::cerr << warn << '\n';
-    if (!success) throw std::runtime_error("Fail");
+    std::vector<Vertex> Vertices;
+    std::vector<idx_t>  Indices;
+    XMVECTOR            BoxMax = XMVectorZero();
+    XMVECTOR            BoxMin = XMVectorZero();
 
-    if (inModel.meshes.size() != 1) throw std::runtime_error("Should have one mesh");
-    tinygltf::Mesh &mesh = inModel.meshes[0];
-
-    if (mesh.primitives.size() != 1) throw std::runtime_error("Should be one primitive");
-    tinygltf::Primitive &primitive = mesh.primitives[0];
-    if (primitive.mode != TINYGLTF_MODE_TRIANGLES) throw std::runtime_error("Only triangles are supported");
-
-    int positionIdx = -1;
-    int normalIdx   = -1;
-    for (auto &&pair : primitive.attributes)
+    void LoadGLB(const std::string &path)
     {
-        if (pair.first == "POSITION")
+        tinygltf::Model    inModel;
+        tinygltf::TinyGLTF tinyGltfCtx;
+        std::string        err;
+        std::string        warn;
+        bool               success = tinyGltfCtx.LoadBinaryFromFile(&inModel, &err, &warn, path);
+        if (!err.empty()) std::cerr << err << '\n';
+        if (!warn.empty()) std::cerr << warn << '\n';
+        if (!success) throw std::runtime_error("Fail");
+
+        if (inModel.meshes.size() != 1) throw std::runtime_error("Should have one mesh");
+        tinygltf::Mesh &mesh = inModel.meshes[0];
+
+        if (mesh.primitives.size() != 1) throw std::runtime_error("Should be one primitive");
+        tinygltf::Primitive &primitive = mesh.primitives[0];
+
+        if (primitive.mode != TINYGLTF_MODE_TRIANGLES) throw std::runtime_error("Only triangles are supported");
+
+        int positionIdx = -1;
+        int normalIdx   = -1;
+        for (auto &&pair : primitive.attributes)
         {
-            if (positionIdx != -1) throw std::runtime_error("Two positions found");
-            positionIdx = pair.second;
-        }
-        else if (pair.first == "NORMAL")
-        {
-            if (normalIdx != -1) throw std::runtime_error("Two normals found");
-            normalIdx = pair.second;
-        }
-    }
-    if (positionIdx == -1) throw std::runtime_error("No position found");
-
-    tinygltf::Accessor   &positionAccessor   = inModel.accessors[positionIdx];
-    tinygltf::BufferView &positionBufferView = inModel.bufferViews[positionAccessor.bufferView];
-    tinygltf::Buffer     &positionBuffer     = inModel.buffers[positionBufferView.buffer];
-
-    tinygltf::Accessor   &normalAccessor   = inModel.accessors[normalIdx];
-    tinygltf::BufferView &normalBufferView = inModel.bufferViews[normalAccessor.bufferView];
-    tinygltf::Buffer     &normalBuffer     = inModel.buffers[normalBufferView.buffer];
-
-    size_t positionStride = positionAccessor.ByteStride(positionBufferView);
-    size_t normalStride   = normalAccessor.ByteStride(normalBufferView);
-
-    if constexpr (DBGOUT) std::cout << "nPositions = " << positionAccessor.count << std::endl;
-    if (positionAccessor.type != TINYGLTF_TYPE_VEC3) throw std::runtime_error("Position is not vec3");
-    if (positionAccessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
-        throw std::runtime_error("Position component type is not float");
-
-    if (normalAccessor.type != TINYGLTF_TYPE_VEC3) throw std::runtime_error("Normal is not vec3");
-    if (normalAccessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
-        throw std::runtime_error("Normal component type is not float");
-
-    std::vector<Vertex> vertices;
-    vertices.reserve(positionAccessor.count);
-    XMVECTOR posMin;
-    XMVECTOR posMax;
-
-    for (size_t iVert = 0; iVert < positionAccessor.count; ++iVert)
-    {
-        size_t offPosition = positionBufferView.byteOffset;
-        offPosition += positionAccessor.byteOffset;
-        offPosition += positionStride * iVert;
-
-        size_t offNormal = normalBufferView.byteOffset;
-        offNormal += normalAccessor.byteOffset;
-        offNormal += normalStride * iVert;
-        unsigned char *pPosition = &positionBuffer.data[offPosition];
-        unsigned char *pNormal   = &normalBuffer.data[offNormal];
-
-        Vertex vert   = {};
-        vert.Position = *reinterpret_cast<float3 *>(pPosition);
-        vert.Normal   = *reinterpret_cast<float3 *>(pNormal);
-        vertices.push_back(vert);
-
-        XMVECTOR pos = XMLoadFloat3(&vert.Position);
-        if (iVert == 0)
-        {
-            posMin = pos;
-            posMax = pos;
-        }
-        else
-        {
-            posMin = XMVectorMin(posMin, pos);
-            posMax = XMVectorMax(posMax, pos);
-        }
-    }
-
-    tinygltf::Accessor   &indexAccessor   = inModel.accessors[primitive.indices];
-    tinygltf::BufferView &indexBufferView = inModel.bufferViews[indexAccessor.bufferView];
-    tinygltf::Buffer     &indexBuffer     = inModel.buffers[indexBufferView.buffer];
-
-    unsigned char *indexBytes = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
-
-    int indexComponentSize = 0;
-    switch (indexAccessor.componentType)
-    {
-    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE: indexComponentSize = 1; break;
-    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT: indexComponentSize = 2; break;
-    case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT: indexComponentSize = 4; break;
-    default: throw std::runtime_error("Unknown component type");
-    }
-
-    if (indexComponentSize != indexAccessor.ByteStride(indexBufferView)) throw std::runtime_error("Non packed indices");
-
-    std::vector<idx_t> indices(indexAccessor.count);
-    for (size_t iiVert = 0; iiVert < indexAccessor.count; ++iiVert)
-    {
-        idx_t iVert = 0;
-        // little endian
-        for (int indexByteOff = 0; indexByteOff < indexComponentSize; ++indexByteOff)
-            iVert += (idx_t)indexBytes[indexComponentSize * iiVert + indexByteOff] << 8 * indexByteOff;
-        indices[iiVert] = iVert;
-    }
-
-    std::map<MeshEdge, std::vector<idx_t>> edgeTriangles;
-
-    size_t nTriangles = indexAccessor.count / 3;
-    for (size_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
-    {
-        if constexpr (DBGOUT) std::cout << "T[" << iTriangle << "]:";
-
-        idx_t vertexIdx[3] = {};
-        for (int iTriVert = 0; iTriVert < 3; ++iTriVert)
-        {
-            idx_t iVert         = indices[IDX_C(3) * iTriangle + iTriVert];
-            vertexIdx[iTriVert] = iVert;
-
-            if constexpr (DBGOUT)
+            if (pair.first == "POSITION")
             {
-                float3 pos = vertices[iVert].Position;
-                std::cout << "    V[" << iVert << "] = (" << pos.x << ", " << pos.y << ", " << pos.z << ")";
+                if (positionIdx != -1) throw std::runtime_error("Two positions found");
+                positionIdx = pair.second;
+            }
+            else if (pair.first == "NORMAL")
+            {
+                if (normalIdx != -1) throw std::runtime_error("Two normals found");
+                normalIdx = pair.second;
             }
         }
-        if constexpr (DBGOUT) std::cout << '\n';
+        if (positionIdx == -1) throw std::runtime_error("No position found");
 
+        tinygltf::Accessor   &positionAccessor   = inModel.accessors[positionIdx];
+        tinygltf::BufferView &positionBufferView = inModel.bufferViews[positionAccessor.bufferView];
+        tinygltf::Buffer     &positionBuffer     = inModel.buffers[positionBufferView.buffer];
+
+        tinygltf::Accessor   &normalAccessor   = inModel.accessors[normalIdx];
+        tinygltf::BufferView &normalBufferView = inModel.bufferViews[normalAccessor.bufferView];
+        tinygltf::Buffer     &normalBuffer     = inModel.buffers[normalBufferView.buffer];
+
+        size_t positionStride = positionAccessor.ByteStride(positionBufferView);
+        size_t normalStride   = normalAccessor.ByteStride(normalBufferView);
+
+        if constexpr (DBGOUT) std::cout << "nPositions = " << positionAccessor.count << std::endl;
+        if (positionAccessor.type != TINYGLTF_TYPE_VEC3) throw std::runtime_error("Position is not vec3");
+        if (positionAccessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
+            throw std::runtime_error("Position component type is not float");
+
+        if (normalAccessor.type != TINYGLTF_TYPE_VEC3) throw std::runtime_error("Normal is not vec3");
+        if (normalAccessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
+            throw std::runtime_error("Normal component type is not float");
+
+        Vertices.reserve(positionAccessor.count);
+
+        for (size_t iVert = 0; iVert < positionAccessor.count; ++iVert)
+        {
+            size_t offPosition = positionBufferView.byteOffset;
+            offPosition += positionAccessor.byteOffset;
+            offPosition += positionStride * iVert;
+
+            size_t offNormal = normalBufferView.byteOffset;
+            offNormal += normalAccessor.byteOffset;
+            offNormal += normalStride * iVert;
+            unsigned char *pPosition = &positionBuffer.data[offPosition];
+            unsigned char *pNormal   = &normalBuffer.data[offNormal];
+
+            Vertex vert   = {};
+            vert.Position = *reinterpret_cast<float3 *>(pPosition);
+            vert.Normal   = *reinterpret_cast<float3 *>(pNormal);
+            Vertices.push_back(vert);
+
+            XMVECTOR pos = XMLoadFloat3(&vert.Position);
+            if (iVert == 0)
+            {
+                BoxMax = pos;
+                BoxMin = pos;
+            }
+            else
+            {
+                BoxMax = XMVectorMax(BoxMax, pos);
+                BoxMin = XMVectorMin(BoxMin, pos);
+            }
+        }
+
+        tinygltf::Accessor   &indexAccessor   = inModel.accessors[primitive.indices];
+        tinygltf::BufferView &indexBufferView = inModel.bufferViews[indexAccessor.bufferView];
+        tinygltf::Buffer     &indexBuffer     = inModel.buffers[indexBufferView.buffer];
+
+        unsigned char *indexBytes = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
+
+        int indexComponentSize = 0;
+        switch (indexAccessor.componentType)
+        {
+        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE: indexComponentSize = 1; break;
+        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT: indexComponentSize = 2; break;
+        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT: indexComponentSize = 4; break;
+        default: throw std::runtime_error("Unknown component type");
+        }
+
+        if (indexComponentSize != indexAccessor.ByteStride(indexBufferView))
+            throw std::runtime_error("Non packed indices");
+
+        Indices.reserve(indexAccessor.count);
+        for (size_t iiVert = 0; iiVert < indexAccessor.count; ++iiVert)
+        {
+            idx_t iVert = 0;
+            // little endian
+            for (int indexByteOff = 0; indexByteOff < indexComponentSize; ++indexByteOff)
+                iVert |= (idx_t)indexBytes[indexComponentSize * iiVert + indexByteOff] << 8 * indexByteOff;
+            Indices.push_back(iVert);
+        }
+    }
+
+    MeshEdge GetEdge(size_t iTriangle, size_t iTriEdge)
+    {
+        idx_t v = Indices[3 * iTriangle + iTriEdge];
+        idx_t u = Indices[3 * iTriangle + (iTriEdge + 1) % 3];
+        if (v > u) std::swap(v, u);
+        return {v, u};
+    }
+};
+
+int main()
+{
+    std::cout << "Loading model...\n";
+    OriginalMesh ogMesh;
+    ogMesh.LoadGLB("model.glb");
+    std::cout << "Loading model done\n";
+
+    std::cout << "Calculating edge map...\n";
+    std::map<MeshEdge, std::vector<idx_t>> edgeTriangles;
+    size_t nTriangles = ogMesh.Indices.size() / 3;
+    for (size_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
+    {
         for (int iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
         {
-            idx_t v = vertexIdx[iTriEdge];
-            idx_t u = vertexIdx[(iTriEdge + 1) % 3];
-            if (v == u) throw std::runtime_error("Collapsed triangle");
-            if (v > u) std::swap(v, u);
-            MeshEdge edge = {v, u};
+            MeshEdge edge = ogMesh.GetEdge(iTriangle, iTriEdge);
             auto     iter = edgeTriangles.try_emplace(edge);
             auto    &vec  = iter.first->second;
             if (!vec.empty() && vec[vec.size() - 1] == iTriangle)
@@ -174,6 +177,7 @@ int main()
             vec.push_back(idx_t(iTriangle));
         }
     }
+    std::cout << "Calculating edge map done\n";
 
     if constexpr (DBGOUT)
     {
@@ -190,6 +194,7 @@ int main()
         }
     }
 
+    std::cout << "Preparing METIS structure...\n";
     // Готовим структуру для первого вызова METIS
     constexpr uint TARGET_PRIMITIVES = MESHLET_MAX_PRIMITIVES * 3 / 4;
 
@@ -204,14 +209,14 @@ int main()
     std::vector<idx_t> adjncy;
     std::vector<idx_t> adjwgt;
 
-    XMVECTOR maxDiff = posMax - posMin;
+    XMVECTOR maxDiff = ogMesh.BoxMax - ogMesh.BoxMin;
     float    maxLen  = XMVectorGetX(XMVector3Length(maxDiff)) * (1.0f + FLT_EPSILON);
 
     for (idx_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
     {
         idx_t vertexIndices[3] = {};
         for (idx_t iTriVert = 0; iTriVert < 3; ++iTriVert)
-            vertexIndices[iTriVert] = indices[IDX_C(3) * iTriangle + iTriVert];
+            vertexIndices[iTriVert] = ogMesh.Indices[IDX_C(3) * iTriangle + iTriVert];
         for (idx_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
         {
             idx_t iVert = vertexIndices[iTriEdge];
@@ -220,8 +225,8 @@ int main()
             MeshEdge edge = {iVert, jVert};
             auto    &vec  = edgeTriangles[edge];
 
-            float3   posi  = vertices[iVert].Position;
-            float3   posj  = vertices[jVert].Position;
+            float3   posi  = ogMesh.Vertices[iVert].Position;
+            float3   posj  = ogMesh.Vertices[jVert].Position;
             XMVECTOR posiv = XMLoadFloat3(&posi);
             XMVECTOR posjv = XMLoadFloat3(&posj);
             float    len   = XMVectorGetX(XMVector3Length(posjv - posiv));
@@ -257,6 +262,7 @@ int main()
     METIS_SetDefaultOptions(options);
     options[METIS_OPTION_NUMBERING] = 0;
 
+    std::cout << "Partitioning meshlets...\n";
     // Для разделения кроме первой фазы нужно будет
     // использовать графы
     int metisResult = METIS_PartGraphKway(&nvtxs,
@@ -273,6 +279,7 @@ int main()
                                           &edgecut,
                                           trianglePart.data());
     if (metisResult != METIS_OK) throw std::runtime_error("METIS failed");
+    std::cout << "Partitioning meshlets done\n";
 
     if constexpr (DBGOUT)
     {
@@ -281,10 +288,11 @@ int main()
             std::cout << "T[" << iTriangle << "] => " << trianglePart[iTriangle] << '\n';
     }
 
+    std::cout << "Converting out model...\n";
     ModelCPU outModel;
 
     // Вершины остаются без изменений
-    outModel.Vertices = vertices;
+    outModel.Vertices = ogMesh.Vertices;
 
     std::vector<std::vector<idx_t>>     partTriangles(nParts);
     std::vector<std::map<idx_t, idx_t>> partVertexMap(nParts);
@@ -297,7 +305,7 @@ int main()
         auto &verts = partVertexMap[iPart];
         for (idx_t iTriVert = 0; iTriVert < 3; ++iTriVert)
         {
-            idx_t iVert = indices[IDX_C(3) * iTriangle + iTriVert];
+            idx_t iVert = ogMesh.Indices[IDX_C(3) * iTriangle + iTriVert];
             verts.try_emplace(iVert, idx_t(verts.size()));
         }
     }
@@ -334,7 +342,7 @@ int main()
             uint prim = 0;
             for (idx_t iTriVert = 0; iTriVert < 3; ++iTriVert)
             {
-                idx_t iVert    = indices[IDX_C(3) * iTriangle + iTriVert];
+                idx_t iVert    = ogMesh.Indices[IDX_C(3) * iTriangle + iTriVert];
                 idx_t iLocVert = vertMap[iVert];
                 prim |= iLocVert << (10 * iTriVert);
             }
@@ -347,7 +355,9 @@ int main()
     outMesh.MeshletOffset = 0;
     outModel.Meshes.push_back(outMesh);
 
+    std::cout << "Saving model...\n";
     outModel.SaveToFile("../MasterThesis/model1.bin");
+    std::cout << "Saving model done\n";
 
     if constexpr (DBGOUT)
     {
