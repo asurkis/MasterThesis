@@ -1,5 +1,6 @@
-#include "UtilWin32.h"
 #include "stdafx.h"
+
+#include "UtilWin32.h"
 
 static LPCWSTR WINDOW_CLASS_NAME = L"WindowClass1";
 static bool    isInit            = false;
