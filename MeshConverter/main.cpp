@@ -2,7 +2,7 @@
 
 #include <algorithm>
 #include <iostream>
-#include <map>
+#include <unordered_map>
 #include <vector>
 
 #include <metis.h>
@@ -22,6 +22,15 @@ constexpr bool DBGOUT = false;
 
 using MeshEdge = std::pair<size_t, size_t>;
 
+struct MeshEdgeHasher
+{
+    uint64_t operator()(MeshEdge edge) const noexcept
+    {
+        return std::hash<uint64_t>{}((edge.first & UINT64_C(0xFFFFFFFF))
+                                     | ((edge.second & UINT64_C(0xFFFFFFFF)) << 32));
+    }
+};
+
 struct IntermediateMesh
 {
     std::vector<Vertex> Vertices;
@@ -29,12 +38,18 @@ struct IntermediateMesh
     XMVECTOR            BoxMax = XMVectorZero();
     XMVECTOR            BoxMin = XMVectorZero();
 
-    std::map<MeshEdge, std::vector<size_t>> EdgeTriangles;
+    std::unordered_map<MeshEdge, std::vector<size_t>, MeshEdgeHasher> EdgeTriangles;
 
     std::vector<idx_t>  TriangleMeshlet;
+    std::vector<size_t> MeshletLayerOffsets;
+
     std::vector<size_t> MeshletTriangles;
-    std::vector<size_t> MeshletOffset;
-    size_t              MeshletCount = 0;
+    std::vector<size_t> MeshletTriangleOffsets;
+
+    std::vector<MeshEdge> MeshletEdges;
+    std::vector<size_t>   MeshletEdgeOffsets;
+
+    std::unordered_map<MeshEdge, std::vector<size_t>, MeshEdgeHasher> EdgeMeshlets;
 
     size_t TriangleCount() const noexcept { return Indices.size() / 3; }
 
@@ -42,11 +57,20 @@ struct IntermediateMesh
     {
         size_t v = Indices[3 * iTriangle + iTriEdge];
         size_t u = Indices[3 * iTriangle + (iTriEdge + 1) % 3];
-        if (v > u) std::swap(v, u);
+        if (v > u)
+            std::swap(v, u);
         return {v, u};
     }
 
-    size_t MeshletSize(size_t iMeshlet) const noexcept { return MeshletOffset[iMeshlet + 1] - MeshletOffset[iMeshlet]; }
+    size_t MeshletSize(size_t iMeshlet) const noexcept
+    {
+        return MeshletTriangleOffsets[iMeshlet + 1] - MeshletTriangleOffsets[iMeshlet];
+    }
+
+    size_t LayerMeshletCount(size_t iLayer) const noexcept
+    {
+        return MeshletLayerOffsets[iLayer + 1] - MeshletLayerOffsets[iLayer];
+    }
 
     void LoadGLB(const std::string &path)
     {
@@ -55,17 +79,23 @@ struct IntermediateMesh
         std::string        err;
         std::string        warn;
         bool               success = tinyGltfCtx.LoadBinaryFromFile(&inModel, &err, &warn, path);
-        if (!err.empty()) std::cerr << err << '\n';
-        if (!warn.empty()) std::cerr << warn << '\n';
-        if (!success) throw std::runtime_error("Fail");
+        if (!err.empty())
+            std::cerr << err << '\n';
+        if (!warn.empty())
+            std::cerr << warn << '\n';
+        if (!success)
+            throw std::runtime_error("Fail");
 
-        if (inModel.meshes.size() != 1) throw std::runtime_error("Should have one mesh");
+        if (inModel.meshes.size() != 1)
+            throw std::runtime_error("Should have one mesh");
         tinygltf::Mesh &mesh = inModel.meshes[0];
 
-        if (mesh.primitives.size() != 1) throw std::runtime_error("Should be one primitive");
+        if (mesh.primitives.size() != 1)
+            throw std::runtime_error("Should be one primitive");
         tinygltf::Primitive &primitive = mesh.primitives[0];
 
-        if (primitive.mode != TINYGLTF_MODE_TRIANGLES) throw std::runtime_error("Only triangles are supported");
+        if (primitive.mode != TINYGLTF_MODE_TRIANGLES)
+            throw std::runtime_error("Only triangles are supported");
 
         int positionIdx = -1;
         int normalIdx   = -1;
@@ -73,16 +103,19 @@ struct IntermediateMesh
         {
             if (pair.first == "POSITION")
             {
-                if (positionIdx != -1) throw std::runtime_error("Two positions found");
+                if (positionIdx != -1)
+                    throw std::runtime_error("Two positions found");
                 positionIdx = pair.second;
             }
             else if (pair.first == "NORMAL")
             {
-                if (normalIdx != -1) throw std::runtime_error("Two normals found");
+                if (normalIdx != -1)
+                    throw std::runtime_error("Two normals found");
                 normalIdx = pair.second;
             }
         }
-        if (positionIdx == -1) throw std::runtime_error("No position found");
+        if (positionIdx == -1)
+            throw std::runtime_error("No position found");
 
         tinygltf::Accessor   &positionAccessor   = inModel.accessors[positionIdx];
         tinygltf::BufferView &positionBufferView = inModel.bufferViews[positionAccessor.bufferView];
@@ -95,12 +128,15 @@ struct IntermediateMesh
         size_t positionStride = positionAccessor.ByteStride(positionBufferView);
         size_t normalStride   = normalAccessor.ByteStride(normalBufferView);
 
-        if constexpr (DBGOUT) std::cout << "nPositions = " << positionAccessor.count << std::endl;
-        if (positionAccessor.type != TINYGLTF_TYPE_VEC3) throw std::runtime_error("Position is not vec3");
+        if constexpr (DBGOUT)
+            std::cout << "nPositions = " << positionAccessor.count << std::endl;
+        if (positionAccessor.type != TINYGLTF_TYPE_VEC3)
+            throw std::runtime_error("Position is not vec3");
         if (positionAccessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
             throw std::runtime_error("Position component type is not float");
 
-        if (normalAccessor.type != TINYGLTF_TYPE_VEC3) throw std::runtime_error("Normal is not vec3");
+        if (normalAccessor.type != TINYGLTF_TYPE_VEC3)
+            throw std::runtime_error("Normal is not vec3");
         if (normalAccessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
             throw std::runtime_error("Normal component type is not float");
 
@@ -172,9 +208,9 @@ struct IntermediateMesh
         {
             for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
             {
-                MeshEdge edge              = GetEdge(iTriangle, iTriEdge);
-                auto     iterInsertionPair = EdgeTriangles.try_emplace(edge);
-                auto    &vec               = iterInsertionPair.first->second;
+                MeshEdge edge        = GetEdge(iTriangle, iTriEdge);
+                auto [iter, isFirst] = EdgeTriangles.try_emplace(edge);
+                auto &vec            = iter->second;
                 if (!vec.empty() && vec[vec.size() - 1] == iTriangle)
                     throw std::runtime_error("Triangle with repeated edge?!");
                 vec.push_back(iTriangle);
@@ -182,10 +218,9 @@ struct IntermediateMesh
         }
     }
 
-    void PartitionIntoMeshlets(size_t meshletCount)
+    void PartitionIntoMeshlets(idx_t nMeshlets)
     {
-        MeshletCount    = meshletCount;
-        idx_t nMeshlets = meshletCount;
+        MeshletLayerOffsets = {0, size_t(nMeshlets)};
 
         size_t nTriangles = TriangleCount();
         TriangleMeshlet.resize(nTriangles, 0);
@@ -195,12 +230,14 @@ struct IntermediateMesh
             return;
         }
 
+        std::cout << "Preparing METIS structure...\n";
         idx_t nvtxs = nTriangles;
+        idx_t ncon  = 1;
 
-        idx_t              ncon = 1;
         std::vector<idx_t> xadj;
         xadj.reserve(size_t(nvtxs) + 1);
         xadj.push_back(0);
+
         std::vector<idx_t> adjncy;
         std::vector<idx_t> adjwgt;
 
@@ -216,7 +253,8 @@ struct IntermediateMesh
             {
                 idx_t iVert = vertexIndices[iTriEdge];
                 idx_t jVert = vertexIndices[(iTriEdge + 1) % 3];
-                if (iVert > jVert) std::swap(iVert, jVert);
+                if (iVert > jVert)
+                    std::swap(iVert, jVert);
                 MeshEdge edge = {iVert, jVert};
                 auto    &vec  = EdgeTriangles[edge];
 
@@ -228,7 +266,8 @@ struct IntermediateMesh
 
                 for (idx_t iOtherTriangle : vec)
                 {
-                    if (iOtherTriangle == iTriangle) continue;
+                    if (iOtherTriangle == iTriangle)
+                        continue;
                     adjncy.push_back(iOtherTriangle);
                     adjwgt.push_back(idx_t(IDX_C(0x7FFFFFFF) * len / maxLen));
                 }
@@ -258,66 +297,205 @@ struct IntermediateMesh
         METIS_SetDefaultOptions(options);
         options[METIS_OPTION_NUMBERING] = 0;
 
-        std::cout << "Partitioning meshlets...\n";
         // Для разделения кроме первой фазы нужно будет
         // использовать графы
         int metisResult = METIS_PartGraphKway(&nvtxs,
                                               &ncon,
                                               xadj.data(),
                                               adjncy.data(),
-                                              nullptr,
-                                              nullptr,
+                                              nullptr /* vwgt */,
+                                              nullptr /* vsize */,
                                               adjwgt.data(),
-                                              &nMeshlets,
-                                              nullptr,
-                                              nullptr,
-                                              options,
-                                              &edgecut,
-                                              TriangleMeshlet.data());
-        if (metisResult != METIS_OK) throw std::runtime_error("METIS failed");
+                                              &nMeshlets /* nparts */,
+                                              nullptr /* tpwgts */,
+                                              nullptr /* ubvec */,
+                                              options /* options */,
+                                              &edgecut /* edgecut */,
+                                              TriangleMeshlet.data() /* part */);
+        if (metisResult != METIS_OK)
+            throw std::runtime_error("METIS failed");
     }
 
     void CollectMeshletTriangles()
     {
-        size_t nTriangles = TriangleCount();
-        MeshletOffset     = std::vector<size_t>(MeshletCount + 1, 0);
+        size_t nMeshlets       = LayerMeshletCount(0);
+        size_t nTriangles      = TriangleCount();
+        MeshletTriangleOffsets = std::vector<size_t>(nMeshlets + 1, 0);
 
         for (size_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
         {
             size_t iMeshlet = TriangleMeshlet[iTriangle];
-            MeshletOffset[iMeshlet + 1]++;
+            MeshletTriangleOffsets[iMeshlet + 1]++;
         }
-        for (size_t iMeshlet = 1; iMeshlet < MeshletCount; ++iMeshlet)
-            MeshletOffset[iMeshlet + 1] += MeshletOffset[iMeshlet];
+        for (size_t iMeshlet = 1; iMeshlet < nMeshlets; ++iMeshlet)
+            MeshletTriangleOffsets[iMeshlet + 1] += MeshletTriangleOffsets[iMeshlet];
 
         MeshletTriangles.resize(nTriangles, 0);
         for (size_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
         {
             size_t iMeshlet              = TriangleMeshlet[iTriangle];
-            size_t iiTriangle            = MeshletOffset[iMeshlet]++;
+            size_t iiTriangle            = MeshletTriangleOffsets[iMeshlet]++;
             MeshletTriangles[iiTriangle] = iTriangle;
         }
-        for (size_t iMeshlet = MeshletCount; iMeshlet > 0; --iMeshlet)
-            MeshletOffset[iMeshlet] = MeshletOffset[iMeshlet - 1];
-        MeshletOffset[0] = 0;
+        for (size_t iMeshlet = nMeshlets; iMeshlet > 0; --iMeshlet)
+            MeshletTriangleOffsets[iMeshlet] = MeshletTriangleOffsets[iMeshlet - 1];
+        MeshletTriangleOffsets[0] = 0;
+    }
+
+    void BuildMeshletEdgeIndex(size_t iLayer)
+    {
+        size_t layerBeg  = MeshletLayerOffsets[iLayer];
+        size_t layerEnd  = MeshletLayerOffsets[iLayer + 1];
+        size_t nMeshlets = layerEnd - layerBeg;
+
+        MeshletEdges.clear();
+        MeshletEdgeOffsets.clear();
+        EdgeMeshlets.clear();
+
+        MeshletEdgeOffsets.push_back(0);
+        for (size_t iMeshlet = layerBeg; iMeshlet < layerEnd; ++iMeshlet)
+        {
+            size_t                iiMeshlet  = iMeshlet - layerBeg;
+            size_t                meshletBeg = MeshletTriangleOffsets[iMeshlet];
+            size_t                meshletEnd = MeshletTriangleOffsets[iMeshlet + 1];
+            std::vector<MeshEdge> seenEdges;
+            for (size_t iiTriangle = meshletBeg; iiTriangle < meshletEnd; ++iiTriangle)
+            {
+                size_t iTriangle = MeshletTriangles[iiTriangle];
+                for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
+                {
+                    MeshEdge edge        = GetEdge(iTriangle, iTriEdge);
+                    auto [iter, isFirst] = EdgeMeshlets.try_emplace(edge);
+                    auto &vec            = iter->second;
+                    if (vec.empty() || vec[vec.size() - 1] != iiMeshlet)
+                        vec.push_back(iiMeshlet);
+                    seenEdges.push_back(edge);
+                }
+            }
+
+            std::sort(seenEdges.begin(), seenEdges.end());
+            if (seenEdges.empty())
+                continue;
+            MeshletEdges.push_back(seenEdges[0]);
+            for (size_t iMeshletEdge = 1; iMeshletEdge < seenEdges.size(); ++iMeshletEdge)
+            {
+                MeshEdge curr = seenEdges[iMeshletEdge];
+                MeshEdge prev = seenEdges[iMeshletEdge - 1];
+                if (curr != prev)
+                    MeshletEdges.push_back(curr);
+            }
+            MeshletEdgeOffsets.push_back(MeshletEdges.size());
+        }
+    }
+
+    void PartitionMeshlets(size_t iLayer)
+    {
+        size_t layerBeg = MeshletLayerOffsets[iLayer];
+        size_t layerEnd = MeshletLayerOffsets[iLayer + 1];
+
+        idx_t nMeshlets = layerEnd - layerBeg;
+        idx_t ncon      = 1;
+
+        idx_t              nparts = (nMeshlets + 3) / 4;
+        std::vector<idx_t> part(nMeshlets, 0);
+
+        if (nparts > 1)
+        {
+            std::vector<idx_t> xadj;
+            xadj.reserve(nMeshlets + 1);
+            xadj.push_back(0);
+
+            std::vector<idx_t> adjncy;
+            std::vector<idx_t> adjwgt;
+
+            std::vector<idx_t> commonEdgesWith(nMeshlets, 0);
+            for (size_t iMeshlet = layerBeg; iMeshlet < layerEnd; ++iMeshlet)
+            {
+                size_t iiMeshlet = iMeshlet - layerBeg;
+                size_t edgesBeg  = MeshletEdgeOffsets[iiMeshlet];
+                size_t edgesEnd  = MeshletEdgeOffsets[iiMeshlet];
+
+                // Пометим все смежные мешлеты как непосещённые
+                for (size_t iEdge = edgesBeg; iEdge < edgesEnd; ++iEdge)
+                {
+                    MeshEdge edge = MeshletEdges[iEdge];
+                    for (size_t jjMeshlet : EdgeMeshlets[edge])
+                    {
+                        if (jjMeshlet != iiMeshlet)
+                            commonEdgesWith[jjMeshlet] = 0;
+                    }
+                }
+
+                // Посчитаем веса рёбер как количество смежных рёбер сетки
+                for (size_t iEdge = edgesBeg; iEdge < edgesEnd; ++iEdge)
+                {
+                    MeshEdge edge = MeshletEdges[iEdge];
+                    for (size_t jjMeshlet : EdgeMeshlets[edge])
+                    {
+                        if (jjMeshlet != iiMeshlet)
+                            commonEdgesWith[jjMeshlet]++;
+                    }
+                }
+
+                // Посчитаем веса рёбер как количество смежных рёбер сетки
+                for (size_t iEdge = edgesBeg; iEdge < edgesEnd; ++iEdge)
+                {
+                    MeshEdge edge = MeshletEdges[iEdge];
+                    for (size_t jjMeshlet : EdgeMeshlets[edge])
+                    {
+                        if (jjMeshlet != iiMeshlet && commonEdgesWith[jjMeshlet] != 0)
+                        {
+                            adjncy.push_back(jjMeshlet);
+                            adjwgt.push_back(commonEdgesWith[jjMeshlet]);
+                            commonEdgesWith[jjMeshlet] = 0;
+                        }
+                    }
+                }
+
+                xadj.push_back(adjncy.size());
+            }
+
+            idx_t options[METIS_NOPTIONS] = {};
+            METIS_SetDefaultOptions(options);
+            options[METIS_OPTION_NUMBERING] = 0;
+
+            idx_t edgecut = 0;
+
+            int metisResult = METIS_PartGraphKway(&nMeshlets /* nvtxs */,
+                                                  &ncon /* ncon */,
+                                                  xadj.data(),
+                                                  adjncy.data(),
+                                                  nullptr /* vwgt */,
+                                                  nullptr /* vsize */,
+                                                  adjwgt.data(),
+                                                  &nparts,
+                                                  nullptr /* tpwgts */,
+                                                  nullptr /* ubvec */,
+                                                  options,
+                                                  &edgecut,
+                                                  part.data());
+            if (metisResult != METIS_OK)
+                throw std::runtime_error("METIS failed");
+        }
     }
 
     void ConvertModel(ModelCPU &outModel)
     {
+        size_t nMeshlets  = LayerMeshletCount(0);
         size_t nTriangles = TriangleCount();
-        outModel.Meshlets.reserve(MeshletCount);
+        outModel.Meshlets.reserve(nMeshlets);
         outModel.Primitives.reserve(nTriangles);
 
         // Используем вектор вместо словаря, т.к. ключи --- это индексы вершин
         std::vector<uint> vertLocalIndex(Vertices.size());
 
-        for (idx_t iMeshlet = 0; iMeshlet < MeshletCount; ++iMeshlet)
+        for (idx_t iMeshlet = 0; iMeshlet < nMeshlets; ++iMeshlet)
         {
-            size_t currOffset = MeshletOffset[iMeshlet];
-            size_t nextOffset = MeshletOffset[iMeshlet + 1];
+            size_t meshletBeg = MeshletTriangleOffsets[iMeshlet];
+            size_t meshletEnd = MeshletTriangleOffsets[iMeshlet + 1];
 
             // Помечаем каждую вершину мешлета как ещё не использованную в этом мешлете
-            for (size_t iiTriangle = currOffset; iiTriangle < nextOffset; ++iiTriangle)
+            for (size_t iiTriangle = meshletBeg; iiTriangle < meshletEnd; ++iiTriangle)
             {
                 size_t iTriangle = MeshletTriangles[iiTriangle];
                 for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
@@ -330,10 +508,10 @@ struct IntermediateMesh
             MeshletDesc meshlet = {};
             meshlet.VertOffset  = outModel.GlobalIndices.size();
             meshlet.VertCount   = 0;
-            meshlet.PrimOffset  = currOffset;
-            meshlet.PrimCount   = nextOffset - currOffset;
+            meshlet.PrimOffset  = meshletBeg;
+            meshlet.PrimCount   = meshletEnd - meshletBeg;
 
-            for (size_t iiTriangle = currOffset; iiTriangle < nextOffset; ++iiTriangle)
+            for (size_t iiTriangle = meshletBeg; iiTriangle < meshletEnd; ++iiTriangle)
             {
                 size_t iTriangle       = MeshletTriangles[iiTriangle];
                 uint   encodedTriangle = 0;
@@ -357,9 +535,9 @@ struct IntermediateMesh
             outModel.Meshlets.push_back(meshlet);
         }
 
-        MeshDesc outMesh      = {};
-        outMesh.MeshletCount  = MeshletCount;
-        outMesh.MeshletOffset = 0;
+        MeshDesc outMesh               = {};
+        outMesh.MeshletCount           = nMeshlets;
+        outMesh.MeshletTriangleOffsets = 0;
         outModel.Meshes.push_back(outMesh);
 
         // Вершины остаются без изменений
@@ -390,18 +568,18 @@ int main()
             std::cout << "V[" << edge.first << ", " << edge.second << "]: T[";
             for (size_t i = 0; i < tris.size(); ++i)
             {
-                if (i != 0) std::cout << ", ";
+                if (i != 0)
+                    std::cout << ", ";
                 std::cout << tris[i];
             }
             std::cout << "]\n";
         }
     }
 
-    std::cout << "Preparing METIS structure...\n";
-    // Готовим структуру для первого вызова METIS
     constexpr uint TARGET_PRIMITIVES = MESHLET_MAX_PRIMITIVES * 3 / 4;
+    idx_t          nMeshlets         = idx_t((nTriangles + TARGET_PRIMITIVES - 1) / TARGET_PRIMITIVES);
 
-    idx_t nMeshlets = idx_t((nTriangles + TARGET_PRIMITIVES - 1) / TARGET_PRIMITIVES);
+    std::cout << "Partitioning meshlets...\n";
     mesh.PartitionIntoMeshlets(nMeshlets);
     std::cout << "Partitioning meshlets done\n";
 
@@ -416,6 +594,10 @@ int main()
     std::cout << "Collecting meshlets...\n";
     mesh.CollectMeshletTriangles();
     std::cout << "Collecting meshlets done\n";
+
+    std::cout << "Building meshlet-edge index...\n";
+    mesh.BuildMeshletEdgeIndex(0);
+    std::cout << "Building meshlet-edge index done\n";
 
     ModelCPU outModel;
 
@@ -462,7 +644,8 @@ int main()
             std::cout << "T[" << iTriangle << "] = L[";
             for (uint iTriVert = 0; iTriVert < 3; ++iTriVert)
             {
-                if (iTriVert != 0) std::cout << ", ";
+                if (iTriVert != 0)
+                    std::cout << ", ";
                 std::cout << ((triCode >> (10 * iTriVert)) & 0x3FF);
             }
             std::cout << "]\n";
@@ -489,7 +672,8 @@ int main()
                 uint triangleCode = outModel.Primitives[iTriangle];
                 for (uint iTriVert = 0; iTriVert < 3; ++iTriVert)
                 {
-                    if (iTriVert != 0) std::cout << ", ";
+                    if (iTriVert != 0)
+                        std::cout << ", ";
                     uint iLocVert = (triangleCode >> (10 * iTriVert)) & 0x3FF;
                     uint iVert    = outModel.GlobalIndices[size_t(meshlet.VertOffset) + iLocVert];
                     std::cout << iVert;

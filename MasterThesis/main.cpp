@@ -157,7 +157,10 @@ void FillCommandList()
 
     pCommandList->SetGraphicsRootSignature(mainPipeline.GetRootSignatureRaw());
     pCommandList->SetGraphicsRootConstantBufferView(0, pCameraGPU->GetGPUVirtualAddress());
-    if (drawModel) { model.Render(); }
+    if (drawModel)
+    {
+        model.Render();
+    }
 
     if (drawMeshletAABB)
     {
@@ -230,12 +233,18 @@ void OnRender()
 
     if (!ImGui::GetIO().WantCaptureKeyboard)
     {
-        if (ImGui::IsKeyDown(ImGuiKey_W)) camPos += camSpeed * deltaTime * vecForward;
-        if (ImGui::IsKeyDown(ImGuiKey_S)) camPos -= camSpeed * deltaTime * vecForward;
-        if (ImGui::IsKeyDown(ImGuiKey_D)) camPos += camSpeed * deltaTime * vecRight;
-        if (ImGui::IsKeyDown(ImGuiKey_A)) camPos -= camSpeed * deltaTime * vecRight;
-        if (ImGui::IsKeyDown(ImGuiKey_E)) camPos += camSpeed * deltaTime * vecUpGlobal;
-        if (ImGui::IsKeyDown(ImGuiKey_Q)) camPos -= camSpeed * deltaTime * vecUpGlobal;
+        if (ImGui::IsKeyDown(ImGuiKey_W))
+            camPos += camSpeed * deltaTime * vecForward;
+        if (ImGui::IsKeyDown(ImGuiKey_S))
+            camPos -= camSpeed * deltaTime * vecForward;
+        if (ImGui::IsKeyDown(ImGuiKey_D))
+            camPos += camSpeed * deltaTime * vecRight;
+        if (ImGui::IsKeyDown(ImGuiKey_A))
+            camPos -= camSpeed * deltaTime * vecRight;
+        if (ImGui::IsKeyDown(ImGuiKey_E))
+            camPos += camSpeed * deltaTime * vecUpGlobal;
+        if (ImGui::IsKeyDown(ImGuiKey_Q))
+            camPos -= camSpeed * deltaTime * vecUpGlobal;
     }
 
     XMVECTOR vecUp = XMVector3Cross(vecRight, vecForward);
@@ -321,7 +330,8 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT uMs
 
 LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam)) return 1;
+    if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
+        return 1;
 
     switch (uMsg)
     {

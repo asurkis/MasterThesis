@@ -16,6 +16,8 @@ struct MeshletDesc
     uint VertOffset;
     uint PrimCount;
     uint PrimOffset;
+    uint Parent1;
+    uint Parent2;
 };
 
 struct BoundingBox
@@ -27,7 +29,7 @@ struct BoundingBox
 struct MeshDesc
 {
     uint MeshletCount;
-    uint MeshletOffset;
+    uint MeshletTriangleOffsets;
 };
 
 struct ModelCPU

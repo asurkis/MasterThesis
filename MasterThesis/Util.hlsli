@@ -23,6 +23,8 @@ struct TMeshlet
     uint VertOffset;
     uint PrimCount;
     uint PrimOffset;
+    uint Parent1;
+    uint Parent2;
 };
 
 struct TBoundingBox

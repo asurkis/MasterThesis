@@ -23,7 +23,8 @@ ComPtr<IDXGIAdapter1> GetHWAdapter(ComPtr<IDXGIFactory1> pFactory1)
         DXGI_ADAPTER_DESC1 desc = {};
         pAdapter->GetDesc1(&desc);
 
-        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
+        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
+            continue;
 
         if (SUCCEEDED(D3D12CreateDevice(pAdapter.Get(), NEEDED_FEATURE_LEVEL, _uuidof(ID3D12Device), nullptr)))
             return pAdapter;
@@ -32,12 +33,14 @@ ComPtr<IDXGIAdapter1> GetHWAdapter(ComPtr<IDXGIFactory1> pFactory1)
     for (UINT i = 0;; ++i)
     {
         ComPtr<IDXGIAdapter1> pAdapter = nullptr;
-        if (FAILED(pFactory->EnumAdapters1(i, &pAdapter))) break;
+        if (FAILED(pFactory->EnumAdapters1(i, &pAdapter)))
+            break;
 
         DXGI_ADAPTER_DESC1 desc = {};
         pAdapter->GetDesc1(&desc);
 
-        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
+        if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
+            continue;
 
         if (SUCCEEDED(D3D12CreateDevice(pAdapter.Get(), NEEDED_FEATURE_LEVEL, _uuidof(ID3D12Device), nullptr)))
             return pAdapter;
@@ -175,7 +178,8 @@ void LoadPipeline(UINT width, UINT height)
         nextFenceValue[i] = 1;
 
         hFenceEvent[i] = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-        if (!hFenceEvent[i].Get()) ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
+        if (!hFenceEvent[i].Get())
+            ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
     }
 
     ThrowIfFailed(pDevice->CreateCommandList(0,
@@ -361,7 +365,8 @@ void ModelGPU::Upload(const ModelCPU &model)
     if (pFence->GetCompletedValue() != 1)
     {
         RaiiHandle hEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-        if (!hEvent.Get()) ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
+        if (!hEvent.Get())
+            ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
         pFence->SetEventOnCompletion(1, hEvent.Get());
         WaitForSingleObjectEx(hEvent.Get(), INFINITE, FALSE);
     }
@@ -373,7 +378,7 @@ void ModelGPU::Render()
     {
         MeshDesc &mesh = meshes[iMesh];
         pCommandList->SetGraphicsRoot32BitConstant(1, mesh.MeshletCount, 0);
-        pCommandList->SetGraphicsRoot32BitConstant(1, mesh.MeshletOffset, 1);
+        pCommandList->SetGraphicsRoot32BitConstant(1, mesh.MeshletTriangleOffsets, 1);
         pCommandList->SetGraphicsRootShaderResourceView(2, pVertices->GetGPUVirtualAddress());
         pCommandList->SetGraphicsRootShaderResourceView(3, pGlobalIndices->GetGPUVirtualAddress());
         pCommandList->SetGraphicsRootShaderResourceView(4, pPrimitives->GetGPUVirtualAddress());
