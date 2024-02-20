@@ -215,7 +215,8 @@ void WaitForLastFrame()
 
 void WaitForAllFrames()
 {
-    for (UINT i = 0; i < FRAME_COUNT; ++i) WaitForFrame(i);
+    for (UINT i = 0; i < FRAME_COUNT; ++i)
+        WaitForFrame(i);
 }
 
 void ExecuteCommandList()

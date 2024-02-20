@@ -202,7 +202,7 @@ struct OriginalMesh
         {
             idx_t vertexIndices[3] = {};
             for (idx_t iTriVert = 0; iTriVert < 3; ++iTriVert)
-                vertexIndices[iTriVert] = Indices[IDX_C(3) * iTriangle + iTriVert];
+                vertexIndices[iTriVert] = Indices[3 * iTriangle + iTriVert];
             for (idx_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
             {
                 idx_t iVert = vertexIndices[iTriEdge];
@@ -226,7 +226,8 @@ struct OriginalMesh
             }
             xadj.push_back(idx_t(adjncy.size()));
         }
-        for (idx_t i = nTriangles; i < nvtxs; ++i) xadj.push_back(idx_t(adjncy.size()));
+        for (idx_t i = nTriangles; i < nvtxs; ++i)
+            xadj.push_back(idx_t(adjncy.size()));
 
         idx_t edgecut = 0;
 
@@ -238,7 +239,8 @@ struct OriginalMesh
                 std::cout << iTriangle << ':';
                 idx_t beg = xadj[iTriangle];
                 idx_t end = xadj[size_t(iTriangle) + 1];
-                for (idx_t i = beg; i < end; ++i) std::cout << ' ' << adjncy[i];
+                for (idx_t i = beg; i < end; ++i)
+                    std::cout << ' ' << adjncy[i];
                 std::cout << '\n';
             }
         }
@@ -318,60 +320,88 @@ int main()
     // Вершины остаются без изменений
     outModel.Vertices = std::move(ogMesh.Vertices);
 
-    std::vector<std::vector<idx_t>>     partTriangles(nMeshlets);
-    std::vector<std::map<idx_t, idx_t>> partVertexMap(nMeshlets);
-
-    for (idx_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
+    // Разбиваем на диапазоны offset[k]..offset[k + 1]
+    std::vector<size_t> meshletOffset(nMeshlets + 1, 0);
+    for (size_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
     {
-        idx_t iPart = ogMesh.TriangleMeshlet[iTriangle];
-        partTriangles[iPart].push_back(iTriangle);
-
-        auto &verts = partVertexMap[iPart];
-        for (idx_t iTriVert = 0; iTriVert < 3; ++iTriVert)
-        {
-            idx_t iVert = ogMesh.Indices[IDX_C(3) * iTriangle + iTriVert];
-            verts.try_emplace(iVert, idx_t(verts.size()));
-        }
+        idx_t iMeshlet = ogMesh.TriangleMeshlet[iTriangle];
+        ++meshletOffset[iMeshlet + 1];
     }
+    for (size_t iMeshlet = 0; iMeshlet < nMeshlets; ++iMeshlet)
+        meshletOffset[iMeshlet + 1] += meshletOffset[iMeshlet];
+
+    std::vector<size_t> meshletTriangles(nTriangles, 0);
+    for (size_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
+    {
+        idx_t  iMeshlet       = ogMesh.TriangleMeshlet[iTriangle];
+        size_t off            = meshletOffset[iMeshlet]++;
+        meshletTriangles[off] = iTriangle;
+    }
+    if (meshletOffset[nMeshlets - 1] != meshletOffset[nMeshlets]) throw std::runtime_error("Assert failed");
+    for (size_t iMeshlet = nMeshlets; iMeshlet > 0; --iMeshlet)
+        meshletOffset[iMeshlet] = meshletOffset[iMeshlet - 1];
+    meshletOffset[0] = 0;
 
     if constexpr (true)
     {
-        for (size_t iPart = 0; iPart < nMeshlets; ++iPart)
+        for (size_t iMeshlet = 0; iMeshlet < nMeshlets; ++iMeshlet)
         {
-            auto &part = partTriangles[iPart];
-            if (part.size() > MESHLET_MAX_PRIMITIVES)
-                std::cout << "Part[" << iPart << "].size() = " << part.size() << "\n";
+            size_t meshletSize = meshletOffset[iMeshlet + 1] - meshletOffset[iMeshlet];
+            if (meshletSize > MESHLET_MAX_PRIMITIVES)
+                std::cout << "Meshlet[" << iMeshlet << "].Size = " << meshletSize << "\n";
         }
     }
 
     outModel.Meshlets.reserve(nMeshlets);
-    for (idx_t iPart = 0; iPart < nMeshlets; ++iPart)
+    outModel.Primitives.reserve(nTriangles);
+
+    // Используем вектор вместо словаря, т.к. ключи --- это индексы вершин
+    std::vector<uint> vertLocalIndex(nVertices);
+
+    for (idx_t iMeshlet = 0; iMeshlet < nMeshlets; ++iMeshlet)
     {
-        auto &vertMap   = partVertexMap[iPart];
-        auto &triangles = partTriangles[iPart];
+        size_t currOffset = meshletOffset[iMeshlet];
+        size_t nextOffset = meshletOffset[iMeshlet + 1];
+
+        // Помечаем каждую вершину мешлета как ещё не использованную в этом мешлете
+        for (size_t iiTriangle = currOffset; iiTriangle < nextOffset; ++iiTriangle)
+        {
+            size_t iTriangle = meshletTriangles[iiTriangle];
+            for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
+            {
+                size_t iVert          = ogMesh.Indices[3 * iTriangle + iTriVert];
+                vertLocalIndex[iVert] = UINT32_MAX;
+            }
+        }
 
         MeshletDesc meshlet = {};
         meshlet.VertOffset  = outModel.GlobalIndices.size();
-        meshlet.VertCount   = vertMap.size();
-        meshlet.PrimOffset  = outModel.Primitives.size();
-        meshlet.PrimCount   = triangles.size();
-        outModel.Meshlets.push_back(meshlet);
+        meshlet.VertCount   = 0;
+        meshlet.PrimOffset  = currOffset;
+        meshlet.PrimCount   = nextOffset - currOffset;
 
-        std::vector<idx_t> vertMapRev(vertMap.size());
-        for (auto &[iVert, iLocVert] : vertMap) vertMapRev[iLocVert] = iVert;
-        for (idx_t iVert : vertMapRev) outModel.GlobalIndices.push_back(iVert);
-
-        for (idx_t iTriangle : triangles)
+        for (size_t iiTriangle = currOffset; iiTriangle < nextOffset; ++iiTriangle)
         {
-            uint prim = 0;
-            for (idx_t iTriVert = 0; iTriVert < 3; ++iTriVert)
+            size_t iTriangle       = meshletTriangles[iiTriangle];
+            uint   encodedTriangle = 0;
+            for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
             {
-                idx_t iVert    = ogMesh.Indices[IDX_C(3) * iTriangle + iTriVert];
-                idx_t iLocVert = vertMap[iVert];
-                prim |= iLocVert << (10 * iTriVert);
+                size_t iVert    = ogMesh.Indices[3 * iTriangle + iTriVert];
+                uint   iLocVert = vertLocalIndex[iVert];
+                // Если вершина ещё не использована в этом мешлете,
+                // назначим ей новый индекс
+                if (iLocVert >= meshlet.VertCount)
+                {
+                    iLocVert              = meshlet.VertCount++;
+                    vertLocalIndex[iVert] = iLocVert;
+                    outModel.GlobalIndices.push_back(iVert);
+                }
+                encodedTriangle |= iLocVert << (10 * iTriVert);
             }
-            outModel.Primitives.push_back(prim);
+            outModel.Primitives.push_back(encodedTriangle);
         }
+
+        outModel.Meshlets.push_back(meshlet);
     }
 
     MeshDesc outMesh      = {};

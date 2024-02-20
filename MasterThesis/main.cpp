@@ -211,8 +211,10 @@ void OnRender()
         camRotY += mouseDelta.x / float(WindowHeight);
         camRotX = std::clamp(camRotX, 0.001f - XM_PIDIV2, XM_PIDIV2 - 0.001f);
 
-        while (camRotY < -XM_PI) camRotY += XM_2PI;
-        while (camRotY > XM_PI) camRotY -= XM_2PI;
+        while (camRotY < -XM_PI)
+            camRotY += XM_2PI;
+        while (camRotY > XM_PI)
+            camRotY -= XM_2PI;
     }
 
     float camRotXSin = 0.0f;
@@ -338,7 +340,8 @@ LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         WindowWidth  = lParam & 0xFFFF;
         WindowHeight = (lParam >> 16) & 0xFFFF;
 
-        for (UINT i = 0; i < FRAME_COUNT; ++i) pRenderTargets[i] = nullptr;
+        for (UINT i = 0; i < FRAME_COUNT; ++i)
+            pRenderTargets[i] = nullptr;
 
         WaitForAllFrames();
         UpdateRenderTargetSize(WindowWidth, WindowHeight);
