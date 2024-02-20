@@ -68,5 +68,5 @@ float3 PaletteColor(uint idx)
     uint3 c = 0.xxx;
     for (uint i = 0; i < 11; ++i)
         c |= ((t >> (3 * i)) & 1) << (10 - i);
-    return float3(c) / 2047.0;
+    return 1.xxx - float3(c) / 2047.0;
 }
