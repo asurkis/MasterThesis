@@ -57,13 +57,14 @@ static void GroupWithOffsets(size_t                    nparts,
     offsets[0] = 0;
 }
 
-struct IntermediateVertex : Vertex
+struct IntermediateVertex
 {
+    Vertex m;
     size_t MeshletCount = 0;
     bool   Visited      = false;
 };
 
-struct Triangle
+struct IndexTriangle
 {
     size_t idx[3];
 
@@ -77,14 +78,54 @@ struct Triangle
     }
 };
 
+// T должен быть тривиальным, напр. int
+template <typename T, size_t CAPACITY> struct TrivialVector
+{
+    T      Data[CAPACITY] = {};
+    size_t Size           = 0;
+
+    bool IsEmpty() const noexcept { return Size == 0; }
+
+    T Last() const
+    {
+        if (IsEmpty())
+            throw std::runtime_error("Empty");
+        return Data[Size - 1];
+    }
+
+    bool LastEquals(T x) const noexcept { return !IsEmpty() && Last() == x; }
+
+    void Clear() noexcept { Size = 0; }
+
+    void Push(T x)
+    {
+        if (Size >= CAPACITY)
+            throw std::runtime_error("Overflow");
+        Data[Size++] = x;
+    }
+
+    T Pop()
+    {
+        if (IsEmpty())
+            throw std::runtime_error("Empty");
+        return Data[--Size];
+    }
+
+    // Имена в нижнем регистре связаны с синтаксисом for-each в C++
+    T       *begin() noexcept { return Data; }
+    T       *end() noexcept { return Data + Size; }
+    const T *begin() const noexcept { return Data; }
+    const T *end() const noexcept { return Data + Size; }
+};
+
 struct IntermediateMesh
 {
     std::vector<IntermediateVertex> Vertices;
-    std::vector<Triangle>           Triangles;
+    std::vector<IndexTriangle>      Triangles;
     XMVECTOR                        BoxMax = XMVectorZero();
     XMVECTOR                        BoxMin = XMVectorZero();
 
-    std::unordered_map<MeshEdge, std::vector<size_t>, MeshEdgeHasher> EdgeTriangles;
+    std::unordered_map<MeshEdge, TrivialVector<size_t, 2>, MeshEdgeHasher> EdgeTriangles;
 
     std::vector<idx_t>  TriangleMeshlet;
     std::vector<size_t> MeshletLayerOffsets;
@@ -97,7 +138,7 @@ struct IntermediateMesh
     std::vector<MeshEdge> MeshletEdges;
     std::vector<size_t>   MeshletEdgeOffsets;
 
-    std::unordered_map<MeshEdge, std::vector<size_t>, MeshEdgeHasher> EdgeMeshlets;
+    std::unordered_map<MeshEdge, TrivialVector<size_t, 2>, MeshEdgeHasher> EdgeMeshlets;
 
     size_t MeshletSize(size_t iMeshlet) const noexcept
     {
@@ -192,11 +233,11 @@ struct IntermediateMesh
             unsigned char *pNormal   = &normalBuffer.data[offNormal];
 
             IntermediateVertex vert = {};
-            vert.Position           = *reinterpret_cast<float3 *>(pPosition);
-            vert.Normal             = *reinterpret_cast<float3 *>(pNormal);
+            vert.m.Position         = *reinterpret_cast<float3 *>(pPosition);
+            vert.m.Normal           = *reinterpret_cast<float3 *>(pNormal);
             Vertices.push_back(vert);
 
-            XMVECTOR pos = XMLoadFloat3(&vert.Position);
+            XMVECTOR pos = XMLoadFloat3(&vert.m.Position);
             if (iVert == 0)
             {
                 BoxMax = pos;
@@ -231,7 +272,7 @@ struct IntermediateMesh
         Triangles.reserve(nTriangles);
         for (size_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
         {
-            Triangle tri = {};
+            IndexTriangle tri = {};
             for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
             {
                 size_t idxOffset = indexComponentSize * (3 * iTriangle + iTriVert);
@@ -255,14 +296,14 @@ struct IntermediateMesh
                 MeshEdge edge        = Triangles[iTriangle].EdgeKey(iTriEdge);
                 auto [iter, isFirst] = EdgeTriangles.try_emplace(edge);
                 auto &vec            = iter->second;
-                if (!vec.empty() && vec[vec.size() - 1] == iTriangle)
+                if (vec.LastEquals(iTriangle))
                     throw std::runtime_error("Triangle with repeated edge?!");
-                vec.push_back(iTriangle);
+                vec.Push(iTriangle);
             }
         }
     }
 
-    void PartitionIntoMeshlets(idx_t nMeshlets)
+    void DoFirstPartition(idx_t nMeshlets)
     {
         MeshletLayerOffsets = {0, size_t(nMeshlets)};
 
@@ -302,18 +343,19 @@ struct IntermediateMesh
                 MeshEdge edge = {iVert, jVert};
                 auto    &vec  = EdgeTriangles[edge];
 
-                float3   posi  = Vertices[iVert].Position;
-                float3   posj  = Vertices[jVert].Position;
-                XMVECTOR posiv = XMLoadFloat3(&posi);
-                XMVECTOR posjv = XMLoadFloat3(&posj);
-                float    len   = XMVectorGetX(XMVector3Length(posjv - posiv));
+                float3   posi   = Vertices[iVert].m.Position;
+                float3   posj   = Vertices[jVert].m.Position;
+                XMVECTOR posiv  = XMLoadFloat3(&posi);
+                XMVECTOR posjv  = XMLoadFloat3(&posj);
+                float    len    = XMVectorGetX(XMVector3Length(posjv - posiv));
+                idx_t    weight = idx_t(IDX_C(0x7FFFFFFF) * len / maxLen);
 
-                for (idx_t iOtherTriangle : vec)
+                for (size_t jTriangle : vec)
                 {
-                    if (iOtherTriangle == iTriangle)
+                    if (jTriangle == iTriangle)
                         continue;
-                    adjncy.push_back(iOtherTriangle);
-                    adjwgt.push_back(idx_t(IDX_C(0x7FFFFFFF) * len / maxLen));
+                    adjncy.push_back(jTriangle);
+                    adjwgt.push_back(weight);
                 }
             }
             xadj.push_back(idx_t(adjncy.size()));
@@ -388,8 +430,8 @@ struct IntermediateMesh
                     MeshEdge edge        = Triangles[iTriangle].EdgeKey(iTriEdge);
                     auto [iter, isFirst] = EdgeMeshlets.try_emplace(edge);
                     auto &vec            = iter->second;
-                    if (vec.empty() || vec[vec.size() - 1] != iiMeshlet)
-                        vec.push_back(iiMeshlet);
+                    if (!vec.LastEquals(iiMeshlet))
+                        vec.Push(iiMeshlet);
                     seenEdges.push_back(edge);
                 }
             }
@@ -527,6 +569,8 @@ struct IntermediateMesh
         MeshletLayerOffsets.push_back(layerEnd + nParts);
     }
 
+    void DecimateMeshlet(std::vector<IndexTriangle> triangles) {}
+
     void ConvertModel(ModelCPU &outModel)
     {
         size_t nMeshlets  = MeshletLayerOffsets[MeshletLayerOffsets.size() - 1];
@@ -591,7 +635,8 @@ struct IntermediateMesh
 
         // Вершины без дополнительной информации
         outModel.Vertices.resize(Vertices.size());
-        std::copy(Vertices.begin(), Vertices.end(), outModel.Vertices.begin());
+        for (size_t iVert = 0; iVert < Vertices.size(); ++iVert)
+            outModel.Vertices[iVert] = Vertices[iVert].m;
     }
 };
 
@@ -616,11 +661,11 @@ int main()
         for (auto &[edge, tris] : mesh.EdgeTriangles)
         {
             std::cout << "V[" << edge.first << ", " << edge.second << "]: T[";
-            for (size_t i = 0; i < tris.size(); ++i)
+            for (size_t i = 0; i < tris.Size; ++i)
             {
                 if (i != 0)
                     std::cout << ", ";
-                std::cout << tris[i];
+                std::cout << tris.Data[i];
             }
             std::cout << "]\n";
         }
@@ -630,7 +675,7 @@ int main()
     idx_t          nMeshlets         = idx_t((nTriangles + TARGET_PRIMITIVES - 1) / TARGET_PRIMITIVES);
 
     std::cout << "Partitioning meshlets...\n";
-    mesh.PartitionIntoMeshlets(nMeshlets);
+    mesh.DoFirstPartition(nMeshlets);
     std::cout << "Partitioning meshlets done\n";
 
     if constexpr (DBGOUT)
