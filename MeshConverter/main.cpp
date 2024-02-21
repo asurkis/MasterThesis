@@ -66,6 +66,15 @@ struct IntermediateVertex : Vertex
 struct Triangle
 {
     size_t idx[3];
+
+    constexpr MeshEdge EdgeKey(size_t iEdge) const
+    {
+        size_t v = idx[iEdge];
+        size_t u = idx[(iEdge + 1) % 3];
+        if (v > u)
+            std::swap(v, u);
+        return {v, u};
+    }
 };
 
 struct IntermediateMesh
@@ -89,15 +98,6 @@ struct IntermediateMesh
     std::vector<size_t>   MeshletEdgeOffsets;
 
     std::unordered_map<MeshEdge, std::vector<size_t>, MeshEdgeHasher> EdgeMeshlets;
-
-    MeshEdge GetEdge(size_t iTriangle, size_t iTriEdge)
-    {
-        size_t v = Triangles[iTriangle].idx[iTriEdge];
-        size_t u = Triangles[iTriangle].idx[(iTriEdge + 1) % 3];
-        if (v > u)
-            std::swap(v, u);
-        return {v, u};
-    }
 
     size_t MeshletSize(size_t iMeshlet) const noexcept
     {
@@ -235,7 +235,7 @@ struct IntermediateMesh
             for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
             {
                 size_t idxOffset = indexComponentSize * (3 * iTriangle + iTriVert);
-                size_t iVert = 0;
+                size_t iVert     = 0;
                 // little endian
                 for (int iByte = 0; iByte < indexComponentSize; ++iByte)
                     iVert |= size_t(indexBytes[idxOffset + iByte]) << (8 * iByte);
@@ -252,7 +252,7 @@ struct IntermediateMesh
         {
             for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
             {
-                MeshEdge edge        = GetEdge(iTriangle, iTriEdge);
+                MeshEdge edge        = Triangles[iTriangle].EdgeKey(iTriEdge);
                 auto [iter, isFirst] = EdgeTriangles.try_emplace(edge);
                 auto &vec            = iter->second;
                 if (!vec.empty() && vec[vec.size() - 1] == iTriangle)
@@ -385,7 +385,7 @@ struct IntermediateMesh
                 size_t iTriangle = MeshletTriangles[iiTriangle];
                 for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
                 {
-                    MeshEdge edge        = GetEdge(iTriangle, iTriEdge);
+                    MeshEdge edge        = Triangles[iTriangle].EdgeKey(iTriEdge);
                     auto [iter, isFirst] = EdgeMeshlets.try_emplace(edge);
                     auto &vec            = iter->second;
                     if (vec.empty() || vec[vec.size() - 1] != iiMeshlet)
