@@ -57,12 +57,23 @@ static void GroupWithOffsets(size_t                    nparts,
     offsets[0] = 0;
 }
 
+struct IntermediateVertex : Vertex
+{
+    size_t MeshletCount = 0;
+    bool   Visited      = false;
+};
+
+struct Triangle
+{
+    size_t idx[3];
+};
+
 struct IntermediateMesh
 {
-    std::vector<Vertex> Vertices;
-    std::vector<size_t> Indices;
-    XMVECTOR            BoxMax = XMVectorZero();
-    XMVECTOR            BoxMin = XMVectorZero();
+    std::vector<IntermediateVertex> Vertices;
+    std::vector<Triangle>           Triangles;
+    XMVECTOR                        BoxMax = XMVectorZero();
+    XMVECTOR                        BoxMin = XMVectorZero();
 
     std::unordered_map<MeshEdge, std::vector<size_t>, MeshEdgeHasher> EdgeTriangles;
 
@@ -79,12 +90,10 @@ struct IntermediateMesh
 
     std::unordered_map<MeshEdge, std::vector<size_t>, MeshEdgeHasher> EdgeMeshlets;
 
-    size_t TriangleCount() const noexcept { return Indices.size() / 3; }
-
     MeshEdge GetEdge(size_t iTriangle, size_t iTriEdge)
     {
-        size_t v = Indices[3 * iTriangle + iTriEdge];
-        size_t u = Indices[3 * iTriangle + (iTriEdge + 1) % 3];
+        size_t v = Triangles[iTriangle].idx[iTriEdge];
+        size_t u = Triangles[iTriangle].idx[(iTriEdge + 1) % 3];
         if (v > u)
             std::swap(v, u);
         return {v, u};
@@ -182,9 +191,9 @@ struct IntermediateMesh
             unsigned char *pPosition = &positionBuffer.data[offPosition];
             unsigned char *pNormal   = &normalBuffer.data[offNormal];
 
-            Vertex vert   = {};
-            vert.Position = *reinterpret_cast<float3 *>(pPosition);
-            vert.Normal   = *reinterpret_cast<float3 *>(pNormal);
+            IntermediateVertex vert = {};
+            vert.Position           = *reinterpret_cast<float3 *>(pPosition);
+            vert.Normal             = *reinterpret_cast<float3 *>(pNormal);
             Vertices.push_back(vert);
 
             XMVECTOR pos = XMLoadFloat3(&vert.Position);
@@ -218,20 +227,27 @@ struct IntermediateMesh
         if (indexComponentSize != indexAccessor.ByteStride(indexBufferView))
             throw std::runtime_error("Non packed indices");
 
-        Indices.reserve(indexAccessor.count);
-        for (size_t iiVert = 0; iiVert < indexAccessor.count; ++iiVert)
+        size_t nTriangles = indexAccessor.count / 3;
+        Triangles.reserve(nTriangles);
+        for (size_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
         {
-            size_t iVert = 0;
-            // little endian
-            for (int indexByteOff = 0; indexByteOff < indexComponentSize; ++indexByteOff)
-                iVert |= size_t(indexBytes[indexComponentSize * iiVert + indexByteOff]) << (8 * indexByteOff);
-            Indices.push_back(iVert);
+            Triangle tri = {};
+            for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
+            {
+                size_t idxOffset = indexComponentSize * (3 * iTriangle + iTriVert);
+                size_t iVert = 0;
+                // little endian
+                for (int iByte = 0; iByte < indexComponentSize; ++iByte)
+                    iVert |= size_t(indexBytes[idxOffset + iByte]) << (8 * iByte);
+                tri.idx[iTriVert] = iVert;
+            }
+            Triangles.push_back(tri);
         }
     }
 
     void BuildTriangleEdgeIndex()
     {
-        size_t nTriangles = TriangleCount();
+        size_t nTriangles = Triangles.size();
         for (size_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
         {
             for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
@@ -250,7 +266,7 @@ struct IntermediateMesh
     {
         MeshletLayerOffsets = {0, size_t(nMeshlets)};
 
-        size_t nTriangles = TriangleCount();
+        size_t nTriangles = Triangles.size();
         TriangleMeshlet.resize(nTriangles, 0);
         if (nMeshlets == 1)
         {
@@ -276,7 +292,7 @@ struct IntermediateMesh
         {
             idx_t vertexIndices[3] = {};
             for (idx_t iTriVert = 0; iTriVert < 3; ++iTriVert)
-                vertexIndices[iTriVert] = Indices[3 * iTriangle + iTriVert];
+                vertexIndices[iTriVert] = Triangles[iTriangle].idx[iTriVert];
             for (idx_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
             {
                 idx_t iVert = vertexIndices[iTriEdge];
@@ -379,16 +395,8 @@ struct IntermediateMesh
             }
 
             std::sort(seenEdges.begin(), seenEdges.end());
-            if (seenEdges.empty())
-                continue;
-            MeshletEdges.push_back(seenEdges[0]);
-            for (size_t iMeshletEdge = 1; iMeshletEdge < seenEdges.size(); ++iMeshletEdge)
-            {
-                MeshEdge curr = seenEdges[iMeshletEdge];
-                MeshEdge prev = seenEdges[iMeshletEdge - 1];
-                if (curr != prev)
-                    MeshletEdges.push_back(curr);
-            }
+            seenEdges.erase(std::unique(seenEdges.begin(), seenEdges.end()), seenEdges.end());
+            MeshletEdges.insert(MeshletEdges.end(), seenEdges.begin(), seenEdges.end());
             MeshletEdgeOffsets.push_back(MeshletEdges.size());
         }
     }
@@ -522,7 +530,7 @@ struct IntermediateMesh
     void ConvertModel(ModelCPU &outModel)
     {
         size_t nMeshlets  = MeshletLayerOffsets[MeshletLayerOffsets.size() - 1];
-        size_t nTriangles = TriangleCount();
+        size_t nTriangles = Triangles.size();
         outModel.Meshlets.reserve(nMeshlets);
         outModel.Primitives.reserve(nTriangles);
 
@@ -540,7 +548,7 @@ struct IntermediateMesh
                 size_t iTriangle = MeshletTriangles[iiTriangle];
                 for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
                 {
-                    size_t iVert          = Indices[3 * iTriangle + iTriVert];
+                    size_t iVert          = Triangles[iTriangle].idx[iTriVert];
                     vertLocalIndex[iVert] = UINT32_MAX;
                 }
             }
@@ -558,7 +566,7 @@ struct IntermediateMesh
                 uint   encodedTriangle = 0;
                 for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
                 {
-                    size_t iVert    = Indices[3 * iTriangle + iTriVert];
+                    size_t iVert    = Triangles[iTriangle].idx[iTriVert];
                     uint   iLocVert = vertLocalIndex[iVert];
                     // Если вершина ещё не использована в этом мешлете,
                     // назначим ей новый индекс
@@ -581,8 +589,9 @@ struct IntermediateMesh
         outMesh.MeshletTriangleOffsets = 0;
         outModel.Meshes.push_back(outMesh);
 
-        // Вершины остаются без изменений
-        outModel.Vertices = std::move(Vertices);
+        // Вершины без дополнительной информации
+        outModel.Vertices.resize(Vertices.size());
+        std::copy(Vertices.begin(), Vertices.end(), outModel.Vertices.begin());
     }
 };
 
@@ -595,7 +604,7 @@ int main()
     std::cout << "Loading model done\n";
 
     size_t nVertices  = mesh.Vertices.size();
-    size_t nTriangles = mesh.TriangleCount();
+    size_t nTriangles = mesh.Triangles.size();
 
     std::cout << "Building triangle edge index...\n";
     mesh.BuildTriangleEdgeIndex();
