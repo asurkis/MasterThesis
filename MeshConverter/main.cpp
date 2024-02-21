@@ -1,8 +1,10 @@
 ﻿#include <Common.h>
 
 #include <algorithm>
+#include <functional>
 #include <iostream>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <metis.h>
@@ -19,6 +21,18 @@ constexpr bool DBGOUT = false;
 #else
 #error "IDTYPEWIDTH not set"
 #endif
+
+static void AssertFn(bool cond, std::string_view text, int line)
+{
+    if (cond)
+        return;
+    std::ostringstream oss;
+    oss << text << " at line " << line;
+    throw std::runtime_error(oss.str());
+}
+
+#define ASSERT_TEXT(cond, text) AssertFn(cond, text, __LINE__)
+#define ASSERT(cond) AssertFn(cond, "Assertion failed: " #cond, __LINE__)
 
 using MeshEdge = std::pair<size_t, size_t>;
 
@@ -60,13 +74,15 @@ static void GroupWithOffsets(size_t                    nparts,
 struct IntermediateVertex
 {
     Vertex m;
-    size_t MeshletCount = 0;
-    bool   Visited      = false;
+
+    // Используем вектор вместо словаря, т.к. ключи --- это индексы вершин
+    // UINT32_MAX --- непосещённая вершина
+    size_t OtherIndex = 0;
 };
 
 struct IndexTriangle
 {
-    size_t idx[3];
+    size_t idx[3] = {};
 
     constexpr MeshEdge EdgeKey(size_t iEdge) const
     {
@@ -88,8 +104,7 @@ template <typename T, size_t CAPACITY> struct TrivialVector
 
     T Last() const
     {
-        if (IsEmpty())
-            throw std::runtime_error("Empty");
+        ASSERT(!IsEmpty());
         return Data[Size - 1];
     }
 
@@ -99,15 +114,13 @@ template <typename T, size_t CAPACITY> struct TrivialVector
 
     void Push(T x)
     {
-        if (Size >= CAPACITY)
-            throw std::runtime_error("Overflow");
+        ASSERT(Size < CAPACITY);
         Data[Size++] = x;
     }
 
     T Pop()
     {
-        if (IsEmpty())
-            throw std::runtime_error("Empty");
+        ASSERT(!IsEmpty());
         return Data[--Size];
     }
 
@@ -116,6 +129,71 @@ template <typename T, size_t CAPACITY> struct TrivialVector
     T       *end() noexcept { return Data + Size; }
     const T *begin() const noexcept { return Data; }
     const T *end() const noexcept { return Data + Size; }
+};
+
+struct DisjointSetUnion
+{
+    struct Node
+    {
+        size_t Parent;
+        size_t Height;
+    };
+
+    std::vector<Node> Nodes;
+
+    DisjointSetUnion(size_t n) : Nodes(n)
+    {
+        for (size_t i = 0; i < n; ++i)
+        {
+            Nodes[i].Parent = i;
+            Nodes[i].Height = 0;
+        }
+    }
+
+    size_t Get(size_t i)
+    {
+        size_t j = Nodes[i].Parent;
+        if (i != j)
+        {
+            j               = Get(j);
+            Nodes[i].Parent = j;
+        }
+        return j;
+    }
+
+    size_t Unite(size_t i, size_t j)
+    {
+        i = Get(i);
+        j = Get(j);
+        if (i == j)
+            return i;
+        if (Nodes[i].Height < Nodes[j].Height)
+        {
+            Nodes[i].Parent = j;
+            return j;
+        }
+        else if (Nodes[i].Height > Nodes[j].Height)
+        {
+            Nodes[j].Parent = i;
+            return i;
+        }
+        else
+        {
+            Nodes[j].Parent = i;
+            Nodes[i].Height++;
+            return i;
+        }
+    }
+
+    void UniteLeft(size_t i, size_t j)
+    {
+        i = Get(i);
+        j = Get(j);
+        if (i == j)
+            return;
+        Nodes[i].Height = std::max(Nodes[i].Height, Nodes[j].Height + 1);
+        Nodes[j].Parent = i;
+    }
 };
 
 struct IntermediateMesh
@@ -161,19 +239,15 @@ struct IntermediateMesh
             std::cerr << err << '\n';
         if (!warn.empty())
             std::cerr << warn << '\n';
-        if (!success)
-            throw std::runtime_error("Fail");
+        ASSERT(success);
 
-        if (inModel.meshes.size() != 1)
-            throw std::runtime_error("Should have one mesh");
+        ASSERT(inModel.meshes.size() == 1);
         tinygltf::Mesh &mesh = inModel.meshes[0];
 
-        if (mesh.primitives.size() != 1)
-            throw std::runtime_error("Should be one primitive");
+        ASSERT(mesh.primitives.size() == 1);
         tinygltf::Primitive &primitive = mesh.primitives[0];
 
-        if (primitive.mode != TINYGLTF_MODE_TRIANGLES)
-            throw std::runtime_error("Only triangles are supported");
+        ASSERT(primitive.mode == TINYGLTF_MODE_TRIANGLES);
 
         int positionIdx = -1;
         int normalIdx   = -1;
@@ -181,19 +255,17 @@ struct IntermediateMesh
         {
             if (pair.first == "POSITION")
             {
-                if (positionIdx != -1)
-                    throw std::runtime_error("Two positions found");
+                ASSERT(positionIdx == -1);
                 positionIdx = pair.second;
             }
             else if (pair.first == "NORMAL")
             {
-                if (normalIdx != -1)
-                    throw std::runtime_error("Two normals found");
+                ASSERT(normalIdx == -1);
                 normalIdx = pair.second;
             }
         }
-        if (positionIdx == -1)
-            throw std::runtime_error("No position found");
+        ASSERT(positionIdx != -1);
+        ASSERT(normalIdx != -1);
 
         tinygltf::Accessor   &positionAccessor   = inModel.accessors[positionIdx];
         tinygltf::BufferView &positionBufferView = inModel.bufferViews[positionAccessor.bufferView];
@@ -208,15 +280,10 @@ struct IntermediateMesh
 
         if constexpr (DBGOUT)
             std::cout << "nPositions = " << positionAccessor.count << std::endl;
-        if (positionAccessor.type != TINYGLTF_TYPE_VEC3)
-            throw std::runtime_error("Position is not vec3");
-        if (positionAccessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
-            throw std::runtime_error("Position component type is not float");
-
-        if (normalAccessor.type != TINYGLTF_TYPE_VEC3)
-            throw std::runtime_error("Normal is not vec3");
-        if (normalAccessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT)
-            throw std::runtime_error("Normal component type is not float");
+        ASSERT(positionAccessor.type == TINYGLTF_TYPE_VEC3);
+        ASSERT(positionAccessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT);
+        ASSERT(normalAccessor.type == TINYGLTF_TYPE_VEC3);
+        ASSERT(normalAccessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT);
 
         Vertices.reserve(positionAccessor.count);
 
@@ -232,9 +299,9 @@ struct IntermediateMesh
             unsigned char *pPosition = &positionBuffer.data[offPosition];
             unsigned char *pNormal   = &normalBuffer.data[offNormal];
 
-            IntermediateVertex vert = {};
-            vert.m.Position         = *reinterpret_cast<float3 *>(pPosition);
-            vert.m.Normal           = *reinterpret_cast<float3 *>(pNormal);
+            IntermediateVertex vert;
+            vert.m.Position = *reinterpret_cast<float3 *>(pPosition);
+            vert.m.Normal   = *reinterpret_cast<float3 *>(pNormal);
             Vertices.push_back(vert);
 
             XMVECTOR pos = XMLoadFloat3(&vert.m.Position);
@@ -265,14 +332,13 @@ struct IntermediateMesh
         default: throw std::runtime_error("Unknown component type");
         }
 
-        if (indexComponentSize != indexAccessor.ByteStride(indexBufferView))
-            throw std::runtime_error("Non packed indices");
+        ASSERT(indexComponentSize == indexAccessor.ByteStride(indexBufferView));
 
         size_t nTriangles = indexAccessor.count / 3;
         Triangles.reserve(nTriangles);
         for (size_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
         {
-            IndexTriangle tri = {};
+            IndexTriangle tri;
             for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
             {
                 size_t idxOffset = indexComponentSize * (3 * iTriangle + iTriVert);
@@ -296,8 +362,7 @@ struct IntermediateMesh
                 MeshEdge edge        = Triangles[iTriangle].EdgeKey(iTriEdge);
                 auto [iter, isFirst] = EdgeTriangles.try_emplace(edge);
                 auto &vec            = iter->second;
-                if (vec.LastEquals(iTriangle))
-                    throw std::runtime_error("Triangle with repeated edge?!");
+                ASSERT(!vec.LastEquals(iTriangle));
                 vec.Push(iTriangle);
             }
         }
@@ -398,8 +463,7 @@ struct IntermediateMesh
                                               options /* options */,
                                               &edgecut /* edgecut */,
                                               TriangleMeshlet.data() /* part */);
-        if (metisResult != METIS_OK)
-            throw std::runtime_error("METIS failed");
+        ASSERT(metisResult == METIS_OK);
 
         GroupWithOffsets(nMeshlets, TriangleMeshlet, MeshletTriangleOffsets, MeshletTriangles);
         MeshletParents1 = std::vector<size_t>(nMeshlets, 0);
@@ -529,8 +593,7 @@ struct IntermediateMesh
                                                   options,
                                                   &edgecut,
                                                   meshletPart.data() /* part */);
-            if (metisResult != METIS_OK)
-                throw std::runtime_error("METIS failed");
+            ASSERT(metisResult == METIS_OK);
         }
 
         std::vector<size_t> partOffsets;
@@ -544,32 +607,175 @@ struct IntermediateMesh
             MeshletParents1[iMeshlet] = layerEnd + iPart;
         }
 
+        // Децимация
         for (size_t iPart = 0; iPart < nParts; ++iPart)
         {
-            // TODO: Properly decimate parent
-            // Сейчас просто берём часть треугольников от каждого из детей
             size_t partBeg  = partOffsets[iPart];
             size_t partEnd  = partOffsets[iPart + 1];
             size_t partSize = partEnd - partBeg;
-            for (size_t iiiTriangle = 0; iiiTriangle < MESHLET_MAX_PRIMITIVES; ++iiiTriangle)
-            {
-                size_t iMeshlet   = partMeshlets[partBeg + iiiTriangle % partSize];
-                size_t meshletBeg = MeshletTriangleOffsets[iMeshlet];
-                size_t meshletEnd = MeshletTriangleOffsets[iMeshlet + 1];
-                size_t iiTriangle = meshletBeg + iiiTriangle / partSize;
-                if (iiTriangle >= meshletEnd)
-                    continue;
-                size_t iTriangle = MeshletTriangles[iiTriangle];
-                MeshletTriangles.push_back(iTriangle);
-            }
-            MeshletTriangleOffsets.push_back(MeshletTriangles.size());
-            MeshletParents1.push_back(0);
+            DecimateSuperMeshlet(&partMeshlets[partBeg], partSize);
         }
 
         MeshletLayerOffsets.push_back(layerEnd + nParts);
     }
 
-    void DecimateMeshlet(std::vector<IndexTriangle> triangles) {}
+    void DecimateSuperMeshlet(size_t *baseMeshlets, size_t nBaseMeshlets)
+    {
+        // TODO: Квадрики
+        // TODO: Оптимизировать поиск граничных рёбер
+        std::vector<IntermediateVertex>                      locVertices;
+        std::vector<IndexTriangle>                           locTriangles;
+        std::unordered_map<MeshEdge, size_t, MeshEdgeHasher> edgeTriangleCount;
+
+        std::unordered_set<MeshEdge, MeshEdgeHasher> dbgUsedEdges;
+
+        // Помечаем вершины для сбора, собираем треугольники
+        for (size_t iiMeshlet = 0; iiMeshlet < nBaseMeshlets; ++iiMeshlet)
+        {
+            size_t iMeshlet   = baseMeshlets[iiMeshlet];
+            size_t meshletBeg = MeshletTriangleOffsets[iMeshlet];
+            size_t meshletEnd = MeshletTriangleOffsets[iMeshlet + 1];
+            for (size_t iiTriangle = meshletBeg; iiTriangle < meshletEnd; ++iiTriangle)
+            {
+                size_t        iTriangle = MeshletTriangles[iiTriangle];
+                IndexTriangle tri       = Triangles[iTriangle];
+                for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
+                {
+                    size_t iVert               = tri.idx[iTriVert];
+                    Vertices[iVert].OtherIndex = UINT32_MAX;
+                }
+                locTriangles.push_back(tri);
+            }
+        }
+
+        // Собираем вершины, а также преобразовываем индексы к локальным
+        for (IndexTriangle &tri : locTriangles)
+        {
+            for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
+            {
+                size_t iVert    = tri.idx[iTriVert];
+                size_t iLocVert = Vertices[iVert].OtherIndex;
+                if (iLocVert >= locVertices.size())
+                {
+                    iLocVert                   = locVertices.size();
+                    Vertices[iVert].OtherIndex = iLocVert;
+                    IntermediateVertex vert    = Vertices[iVert];
+                    // Обратный индекс, по которому будем определять, нужно ли добавлять вершину
+                    vert.OtherIndex = iVert;
+                    locVertices.push_back(vert);
+                }
+                tri.idx[iTriVert] = iLocVert;
+            }
+
+            for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
+            {
+                MeshEdge edge        = tri.EdgeKey(iTriEdge);
+                auto [iter, isFirst] = edgeTriangleCount.try_emplace(edge, 0);
+                iter->second++;
+            }
+        }
+
+        std::vector<bool> isTriangleDeleted(locTriangles.size(), false);
+        std::vector<bool> isVertexBorder(locVertices.size(), false);
+
+        for (auto &[edge, count] : edgeTriangleCount)
+        {
+            if (count == 1)
+            {
+                isVertexBorder[edge.first]  = true;
+                isVertexBorder[edge.second] = true;
+                dbgUsedEdges.insert(edge);
+            }
+        }
+
+        // Неправильная децимация, просто схлопываем ребро к одной вершине
+        // Хотим проверить корректность топологии
+        DisjointSetUnion dsu(locVertices.size());
+        size_t           nCollapsed = 0;
+
+        for (size_t iTriangle = 0; iTriangle < locTriangles.size(); ++iTriangle)
+        {
+            for (size_t iTriEdge = 0; !isTriangleDeleted[iTriangle] && iTriEdge < 3; ++iTriEdge)
+            {
+                size_t iVert = dsu.Get(locTriangles[iTriangle].idx[iTriEdge]);
+                size_t jVert = dsu.Get(locTriangles[iTriangle].idx[(iTriEdge + 1) % 3]);
+                if (iVert == jVert)
+                {
+                    isTriangleDeleted[iTriangle] = true;
+                    break;
+                }
+                if (isVertexBorder[iVert])
+                {
+                    if (isVertexBorder[jVert])
+                    {
+                        // Ребро на границе, схлопывать нельзя
+                        continue;
+                    }
+                    else
+                    {
+                        dsu.UniteLeft(iVert, jVert);
+                    }
+                }
+                else
+                {
+                    if (isVertexBorder[jVert])
+                    {
+                        dsu.UniteLeft(jVert, iVert);
+                    }
+                    else
+                    {
+                        size_t kVert = dsu.Unite(iVert, jVert);
+                        ASSERT(kVert == iVert || kVert == jVert);
+                    }
+                }
+                ++nCollapsed;
+                isTriangleDeleted[iTriangle] = true;
+            }
+        }
+
+        for (size_t iTriangle = 0; iTriangle < locTriangles.size(); ++iTriangle)
+        {
+            IndexTriangle tri = locTriangles[iTriangle];
+            for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
+                tri.idx[iTriVert] = dsu.Get(tri.idx[iTriVert]);
+            for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
+            {
+                size_t iVert = tri.idx[iTriEdge];
+                size_t jVert = tri.idx[(iTriEdge + 1) % 3];
+                if (iVert == jVert)
+                    isTriangleDeleted[iTriangle] = true;
+            }
+
+            if (isTriangleDeleted[iTriangle])
+                continue;
+
+            for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
+            {
+                MeshEdge edge = tri.EdgeKey(iTriEdge);
+                dbgUsedEdges.erase(edge);
+            }
+
+            for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
+            {
+                size_t iLocVert   = tri.idx[iTriVert];
+                size_t iVert      = locVertices[iLocVert].OtherIndex;
+                tri.idx[iTriVert] = iVert;
+            }
+            MeshletTriangles.push_back(Triangles.size());
+            Triangles.push_back(tri);
+        }
+
+        ASSERT(dbgUsedEdges.empty());
+
+        size_t nTrisLeft = MeshletTriangles.size() - MeshletTriangleOffsets[MeshletTriangleOffsets.size() - 1];
+        std::cout << "Collapsed " << nCollapsed << " out of " << edgeTriangleCount.size() << " edges, " << nTrisLeft
+                  << " triangles out of " << locTriangles.size() << " left\n";
+
+        MeshletTriangleOffsets.push_back(MeshletTriangles.size());
+        MeshletParents1.push_back(0);
+
+        // Пока не разбиваем
+    }
 
     void ConvertModel(ModelCPU &outModel)
     {
@@ -577,9 +783,6 @@ struct IntermediateMesh
         size_t nTriangles = Triangles.size();
         outModel.Meshlets.reserve(nMeshlets);
         outModel.Primitives.reserve(nTriangles);
-
-        // Используем вектор вместо словаря, т.к. ключи --- это индексы вершин
-        std::vector<uint> vertLocalIndex(Vertices.size());
 
         for (idx_t iMeshlet = 0; iMeshlet < nMeshlets; ++iMeshlet)
         {
@@ -592,8 +795,8 @@ struct IntermediateMesh
                 size_t iTriangle = MeshletTriangles[iiTriangle];
                 for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
                 {
-                    size_t iVert          = Triangles[iTriangle].idx[iTriVert];
-                    vertLocalIndex[iVert] = UINT32_MAX;
+                    size_t iVert               = Triangles[iTriangle].idx[iTriVert];
+                    Vertices[iVert].OtherIndex = UINT32_MAX;
                 }
             }
 
@@ -611,13 +814,13 @@ struct IntermediateMesh
                 for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
                 {
                     size_t iVert    = Triangles[iTriangle].idx[iTriVert];
-                    uint   iLocVert = vertLocalIndex[iVert];
+                    uint   iLocVert = Vertices[iVert].OtherIndex;
                     // Если вершина ещё не использована в этом мешлете,
                     // назначим ей новый индекс
                     if (iLocVert >= meshlet.VertCount)
                     {
-                        iLocVert              = meshlet.VertCount++;
-                        vertLocalIndex[iVert] = iLocVert;
+                        iLocVert                   = meshlet.VertCount++;
+                        Vertices[iVert].OtherIndex = iLocVert;
                         outModel.GlobalIndices.push_back(iVert);
                     }
                     encodedTriangle |= iLocVert << (10 * iTriVert);
