@@ -80,21 +80,23 @@ void ModelCPU::LoadFromFile(const std::filesystem::path &path)
     {
         const MeshletDesc &meshlet = Meshlets[iMeshlet];
         const BoundingBox &aabb    = MeshletBoxes[iMeshlet];
-        // Восстанавливаем AABB родителя
-        uint iParent = meshlet.Parent1;
-        if (iParent != 0)
+        // Восстанавливаем AABB родителей
+        for (uint iParent : {meshlet.Parent1, meshlet.Parent2})
         {
-            if (iParent <= iMeshlet || iParent >= Meshlets.size())
-                throw std::runtime_error("Incorrect Parent1");
-            BoundingBox &aabbParent = MeshletBoxes[iParent];
+            if (iParent != 0)
+            {
+                if (iParent <= iMeshlet || iParent >= Meshlets.size())
+                    throw std::runtime_error("Incorrect Parent1");
+                BoundingBox &aabbParent = MeshletBoxes[iParent];
 
-            aabbParent.Min.x = XMMin(aabbParent.Min.x, aabb.Min.x);
-            aabbParent.Min.y = XMMin(aabbParent.Min.y, aabb.Min.y);
-            aabbParent.Min.z = XMMin(aabbParent.Min.z, aabb.Min.z);
-            aabbParent.Max.x = XMMax(aabbParent.Max.x, aabb.Max.x);
-            aabbParent.Max.y = XMMax(aabbParent.Max.y, aabb.Max.y);
-            aabbParent.Max.z = XMMax(aabbParent.Max.z, aabb.Max.z);
-            Meshlets[iParent].ChildrenCount++;
+                aabbParent.Min.x = XMMin(aabbParent.Min.x, aabb.Min.x);
+                aabbParent.Min.y = XMMin(aabbParent.Min.y, aabb.Min.y);
+                aabbParent.Min.z = XMMin(aabbParent.Min.z, aabb.Min.z);
+                aabbParent.Max.x = XMMax(aabbParent.Max.x, aabb.Max.x);
+                aabbParent.Max.y = XMMax(aabbParent.Max.y, aabb.Max.y);
+                aabbParent.Max.z = XMMax(aabbParent.Max.z, aabb.Max.z);
+                Meshlets[iParent].ChildrenCount++;
+            }
         }
     }
 }
