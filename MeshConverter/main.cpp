@@ -12,8 +12,6 @@
 
 using namespace DirectX;
 
-constexpr bool DBGOUT = false;
-
 #if IDXTYPEWIDTH == 32
 #define IDX_C(x) INT32_C(x)
 #elif IDXTYPEWIDTH == 64
@@ -278,7 +276,7 @@ struct IntermediateMesh
         size_t positionStride = positionAccessor.ByteStride(positionBufferView);
         size_t normalStride   = normalAccessor.ByteStride(normalBufferView);
 
-        if constexpr (DBGOUT)
+        if constexpr (false)
             std::cout << "nPositions = " << positionAccessor.count << std::endl;
         ASSERT(positionAccessor.type == TINYGLTF_TYPE_VEC3);
         ASSERT(positionAccessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT);
@@ -380,7 +378,7 @@ struct IntermediateMesh
             return;
         }
 
-        std::cout << "Preparing METIS structure...\n";
+        // std::cout << "Preparing METIS structure...\n";
         idx_t nvtxs = nTriangles;
         idx_t ncon  = 1;
 
@@ -425,7 +423,7 @@ struct IntermediateMesh
 
         idx_t edgecut = 0;
 
-        if constexpr (DBGOUT)
+        if constexpr (false)
         {
             std::cout << "\nAdjacency:\n";
             for (idx_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
@@ -767,8 +765,8 @@ struct IntermediateMesh
         ASSERT(dbgUsedEdges.empty());
 
         size_t nTrisLeft = MeshletTriangles.size() - MeshletTriangleOffsets[MeshletTriangleOffsets.size() - 1];
-        std::cout << "Collapsed " << nCollapsed << " out of " << edgeTriangleCount.size() << " edges, " << nTrisLeft
-                  << " triangles out of " << locTriangles.size() << " left\n";
+        // std::cout << "Collapsed " << nCollapsed << " out of " << edgeTriangleCount.size() << " edges, " << nTrisLeft
+        //           << " triangles out of " << locTriangles.size() << " left\n";
 
         // Разбиваем децимированный мешлет на два
 
@@ -931,7 +929,7 @@ int main()
     mesh.BuildTriangleEdgeIndex();
     std::cout << "Building triangle edge index done\n";
 
-    if constexpr (DBGOUT)
+    if constexpr (false)
     {
         std::cout << "\nBy edge:\n";
         for (auto &[edge, tris] : mesh.EdgeTriangles)
@@ -950,11 +948,11 @@ int main()
     constexpr uint TARGET_PRIMITIVES = MESHLET_MAX_PRIMITIVES * 3 / 4;
     idx_t          nMeshlets         = idx_t((nTriangles + TARGET_PRIMITIVES - 1) / TARGET_PRIMITIVES);
 
-    std::cout << "Partitioning meshlets...\n";
+    // std::cout << "Partitioning meshlets...\n";
     mesh.DoFirstPartition(nMeshlets);
-    std::cout << "Partitioning meshlets done\n";
+    // std::cout << "Partitioning meshlets done\n";
 
-    if constexpr (DBGOUT)
+    if constexpr (false)
     {
         std::cout << "\nClusterization:\n";
         for (idx_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
@@ -963,20 +961,20 @@ int main()
 
     for (size_t iLayer = 0; mesh.LayerMeshletCount(iLayer) > 2; ++iLayer)
     {
-        std::cout << "Building meshlet-edge index...\n";
+        // std::cout << "Building meshlet-edge index...\n";
         mesh.BuildMeshletEdgeIndex(iLayer);
-        std::cout << "Building meshlet-edge index done\n";
+        // std::cout << "Building meshlet-edge index done\n";
 
-        std::cout << "Partitioning meshlet graph...\n";
+        // std::cout << "Partitioning meshlet graph...\n";
         mesh.PartitionMeshlets(iLayer);
-        std::cout << "Partitioning meshlet graph done\n";
+        // std::cout << "Partitioning meshlet graph done\n";
     }
 
     ModelCPU outModel;
 
-    std::cout << "Converting out model...\n";
+    // std::cout << "Converting out model...\n";
     mesh.ConvertModel(outModel);
-    std::cout << "Converting out model done\n";
+    // std::cout << "Converting out model done\n";
 
     // Предупреждаем о нарушениях контракта
     if constexpr (true)
@@ -993,7 +991,7 @@ int main()
     outModel.SaveToFile("../MasterThesis/model.bin");
     std::cout << "Saving model done\n";
 
-    if constexpr (DBGOUT)
+    if constexpr (false)
     {
         std::cout << "\nOut model:\nVertices:\n";
         for (size_t iVert = 0; iVert < outModel.Vertices.size(); ++iVert)
