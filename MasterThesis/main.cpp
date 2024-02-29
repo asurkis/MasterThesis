@@ -27,10 +27,11 @@ MeshPipeline aabbPipeline;
 // float    camRotY  = XMConvertToRadians(135.0f);
 // float    camSpeed = 50.0f;
 
-XMVECTOR camPos   = XMVectorSet(0.0f, 0.0f, -3.0f, 0.0f);
-float    camRotX  = XMConvertToRadians(0.0f);
-float    camRotY  = XMConvertToRadians(0.0f);
-float    camSpeed = 10.0f;
+XMVECTOR camFocus  = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
+float    camRotX   = XMConvertToRadians(0.0f);
+float    camRotY   = XMConvertToRadians(0.0f);
+float    camSpeed  = 10.0f;
+float    camOffset = 3.0f;
 
 bool drawModel       = true;
 bool drawMeshletAABB = false;
@@ -193,9 +194,10 @@ void OnRender()
     if (ImGui::CollapsingHeader("Camera"))
     {
         ImGui::SliderFloat("Movement speed", &camSpeed, 1.0f, 256.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-        ImGui::Text("Position X: %.3f", XMVectorGetX(camPos));
-        ImGui::Text("Position Y: %.3f", XMVectorGetY(camPos));
-        ImGui::Text("Position Z: %.3f", XMVectorGetZ(camPos));
+        ImGui::SliderFloat("Offset", &camOffset, 1.0f, 256.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+        ImGui::Text("Focus X: %.3f", XMVectorGetX(camFocus));
+        ImGui::Text("Focus Y: %.3f", XMVectorGetY(camFocus));
+        ImGui::Text("Focus Z: %.3f", XMVectorGetZ(camFocus));
         ImGui::Text("Rotation X: %.1f deg", XMConvertToDegrees(camRotX));
         ImGui::Text("Rotation Y: %.1f deg", XMConvertToDegrees(camRotY));
     }
@@ -210,8 +212,8 @@ void OnRender()
     {
         ImVec2 mouseDelta = ImGui::GetMouseDragDelta(0, 0.0f);
         ImGui::ResetMouseDragDelta();
-        camRotX += mouseDelta.y / float(WindowHeight);
-        camRotY += mouseDelta.x / float(WindowHeight);
+        camRotX -= camOffset * mouseDelta.y / float(WindowHeight);
+        camRotY -= camOffset * mouseDelta.x / float(WindowHeight);
         camRotX = std::clamp(camRotX, 0.001f - XM_PIDIV2, XM_PIDIV2 - 0.001f);
 
         while (camRotY < -XM_PI)
@@ -234,17 +236,17 @@ void OnRender()
     if (!ImGui::GetIO().WantCaptureKeyboard)
     {
         if (ImGui::IsKeyDown(ImGuiKey_W))
-            camPos += camSpeed * deltaTime * vecForward;
+            camFocus += camSpeed * deltaTime * vecForward;
         if (ImGui::IsKeyDown(ImGuiKey_S))
-            camPos -= camSpeed * deltaTime * vecForward;
+            camFocus -= camSpeed * deltaTime * vecForward;
         if (ImGui::IsKeyDown(ImGuiKey_D))
-            camPos += camSpeed * deltaTime * vecRight;
+            camFocus += camSpeed * deltaTime * vecRight;
         if (ImGui::IsKeyDown(ImGuiKey_A))
-            camPos -= camSpeed * deltaTime * vecRight;
+            camFocus -= camSpeed * deltaTime * vecRight;
         if (ImGui::IsKeyDown(ImGuiKey_E))
-            camPos += camSpeed * deltaTime * vecUpGlobal;
+            camFocus += camSpeed * deltaTime * vecUpGlobal;
         if (ImGui::IsKeyDown(ImGuiKey_Q))
-            camPos -= camSpeed * deltaTime * vecUpGlobal;
+            camFocus -= camSpeed * deltaTime * vecUpGlobal;
     }
 
     XMVECTOR vecUp = XMVector3Cross(vecRight, vecForward);
@@ -266,7 +268,7 @@ void OnRender()
                                   0.0f,
                                   1.0f);
 
-    XMMATRIX matTrans = XMMatrixTranslationFromVector(-camPos);
+    XMMATRIX matTrans = XMMatrixTranslationFromVector(camOffset * vecForward - camFocus);
 
     CameraCB.MatView     = XMMatrixTranspose(matTrans * matRot);
     CameraCB.MatProj     = XMMatrixTranspose(XMMatrixPerspectiveFovRH(45.0f, aspect, 1000.0f, 0.001f));
