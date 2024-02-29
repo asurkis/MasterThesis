@@ -41,7 +41,7 @@ bool IsEnough(TBoundingBox box)
     if (hs.w <= 0)
         return true;
     float r = diameter / hs.w;
-    return r < 0.25;
+    return r < 1e-6f * MeshInfo.RadiusCutoffMicro;
 }
 
 bool ShouldDisplay(uint iMeshlet)

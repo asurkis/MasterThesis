@@ -47,6 +47,7 @@ struct TMesh
 {
     uint MeshletCount;
     uint MeshletOffset;
+    uint RadiusCutoffMicro;
 };
 
 struct TPayload

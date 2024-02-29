@@ -33,6 +33,8 @@ float    camRotY   = XMConvertToRadians(0.0f);
 float    camSpeed  = 10.0f;
 float    camOffset = 3.0f;
 
+float meshletCutoff = 0.25f;
+
 bool drawModel       = true;
 bool drawMeshletAABB = false;
 
@@ -160,12 +162,14 @@ void FillCommandList()
     pCommandList->SetGraphicsRootConstantBufferView(0, pCameraGPU->GetGPUVirtualAddress());
     if (drawModel)
     {
+        pCommandList->SetGraphicsRoot32BitConstant(1, 1e6f * meshletCutoff, 2);
         model.Render();
     }
 
     if (drawMeshletAABB)
     {
         pCommandList->SetPipelineState(aabbPipeline.GetStateRaw());
+        pCommandList->SetGraphicsRoot32BitConstant(1, 1e6f * meshletCutoff, 2);
         model.Render();
     }
 
@@ -203,6 +207,7 @@ void OnRender()
     }
     ImGui::Checkbox("Draw model", &drawModel);
     ImGui::Checkbox("Draw meshlet AABB", &drawMeshletAABB);
+    ImGui::SliderFloat("Meshlet cutoff", &meshletCutoff, 0.1f, 2.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::End();
 
     float aspect    = float(WindowWidth) / float(WindowHeight);
