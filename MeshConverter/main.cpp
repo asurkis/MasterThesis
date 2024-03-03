@@ -43,32 +43,6 @@ struct MeshEdgeHasher
     }
 };
 
-static void GroupWithOffsets(size_t                    nparts,
-                             const std::vector<idx_t> &parts,
-                             std::vector<size_t>      &offsets,
-                             std::vector<size_t>      &grouped)
-{
-    size_t n = parts.size();
-    offsets  = std::vector<size_t>(nparts + 1, 0);
-    grouped.resize(n);
-    for (size_t i = 0; i < n; ++i)
-    {
-        size_t iPart = parts[i];
-        offsets[iPart + 1]++;
-    }
-    for (size_t iPart = 1; iPart < nparts; ++iPart)
-        offsets[iPart + 1] += offsets[iPart];
-    for (size_t i = 0; i < n; ++i)
-    {
-        size_t iPart = parts[i];
-        size_t ii    = offsets[iPart]++;
-        grouped[ii]  = i;
-    }
-    for (size_t iPart = nparts; iPart > 0; --iPart)
-        offsets[iPart] = offsets[iPart - 1];
-    offsets[0] = 0;
-}
-
 struct IntermediateVertex
 {
     Vertex m;
@@ -127,6 +101,108 @@ template <typename T, size_t CAPACITY> struct TrivialVector
     T       *end() noexcept { return Data + Size; }
     const T *begin() const noexcept { return Data; }
     const T *end() const noexcept { return Data + Size; }
+};
+
+template <typename T> struct Slice
+{
+    Slice(T *data, size_t size) : mData(data), mSize(size) {}
+    Slice(T *begin, T *end) : Slice(begin, std::distance(begin, end)) {}
+    Slice(std::vector<T> &vec) : Slice(vec.data(), vec.size()) {}
+    template <size_t N> Slice(T arr[N]) : Slice(arr, N) {}
+    template <size_t N> Slice(TrivialVector<T, N> &vec) : Slice(vec.Data, vec.Size) {}
+    Slice(const Slice &) = default;
+
+    T       &operator[](size_t i) { return mData[i]; }
+    const T &operator[](size_t i) const { return mData[i]; }
+
+    constexpr bool   IsEmpty() const noexcept { return Size() == 0; }
+    constexpr size_t Size() const noexcept { return mSize; }
+
+    constexpr Slice Subslice(size_t beg, size_t end) const
+    {
+        ASSERT(beg <= end);
+        ASSERT(end <= mSize);
+        return Slice(mData + beg, mData + end);
+    }
+    constexpr Slice Skip(size_t n) const
+    {
+        ASSERT(n <= mSize);
+        return Slice(mData + n, mSize - n);
+    }
+    constexpr Slice Limit(size_t n) const { return Slice(mData, std::min(mSize, n)); }
+
+    constexpr T       *begin() noexcept { return mData; }
+    constexpr T       *end() noexcept { return mData + mSize; }
+    constexpr const T *begin() const noexcept { return mData; }
+    constexpr const T *end() const noexcept { return mData + mSize; }
+
+  private:
+    T     *mData;
+    size_t mSize;
+};
+
+template <typename T> struct SplitVector
+{
+    SplitVector()                               = default;
+    SplitVector(const SplitVector &)            = default;
+    SplitVector(SplitVector &&)                 = default;
+    SplitVector &operator=(const SplitVector &) = default;
+    SplitVector &operator=(SplitVector &&)      = default;
+
+    // Преобразовать из вектора, в котором записаны номера кластеров
+    template <typename IntT>
+    SplitVector(size_t nClusters, Slice<IntT> clusterization) : mVec(clusterization.Size()), mSplits(nClusters + 1, 0)
+    {
+        for (IntT cluster : clusterization)
+            mSplits[cluster + 1]++;
+        for (size_t i = 2; i <= nClusters; ++i)
+            mSplits[i] += mSplits[i - 1];
+        for (size_t i = 0; i < clusterization.Size(); ++i)
+        {
+            size_t iCluster = clusterization[i];
+            size_t pos      = mSplits[iCluster]++;
+            mVec[pos]       = i;
+        }
+        for (size_t i = nClusters; i > 0; --i)
+            mSplits[i] = mSplits[i - 1];
+        mSplits[0] = 0;
+
+        for (size_t i = 0; i < nClusters; ++i)
+        {
+            ASSERT(mSplits[i] <= mSplits[i + 1]);
+        }
+    }
+
+    Slice<T> Part(size_t iPart)
+    {
+        size_t beg = mSplits[iPart];
+        size_t end = mSplits[iPart + 1];
+        return Slice(mVec).Subslice(beg, end);
+    }
+
+    size_t PartSize(size_t iPart) const { return mSplits[iPart + 1] - mSplits[iPart]; }
+    size_t PartCount() const noexcept { return mSplits.size() - 1; }
+
+    Slice<T> operator[](size_t iPart) { return Part(iPart); }
+
+    T       &Flat(size_t i) { return mVec[i]; }
+    const T &Flat(size_t i) const { return mVec[i]; }
+    size_t   Split(size_t i) const { return mSplits[i]; }
+
+    void Push(const T &x) { mVec.push_back(x); }
+    void Push(T &&x) { mVec.push_back(std::move(x)); }
+    void PushSplit() { mSplits.push_back(mVec.size()); }
+
+    void Clear()
+    {
+        mVec.clear();
+        mSplits.clear();
+        mSplits.push_back(0);
+    }
+
+  private:
+    std::vector<T>      mVec;
+    std::vector<size_t> mSplits{0};
 };
 
 struct DisjointSetUnion
@@ -196,30 +272,21 @@ struct DisjointSetUnion
 
 struct IntermediateMesh
 {
+    template <size_t N> using EdgeIndicesMap = std::unordered_map<MeshEdge, TrivialVector<size_t, N>, MeshEdgeHasher>;
+
     std::vector<IntermediateVertex> Vertices;
     std::vector<IndexTriangle>      Triangles;
     XMVECTOR                        BoxMax = XMVectorZero();
     XMVECTOR                        BoxMin = XMVectorZero();
 
-    std::unordered_map<MeshEdge, TrivialVector<size_t, 2>, MeshEdgeHasher> EdgeTriangles;
-
     std::vector<idx_t>  TriangleMeshlet;
     std::vector<size_t> MeshletLayerOffsets;
 
-    std::vector<size_t> MeshletTriangles;
-    std::vector<size_t> MeshletTriangleOffsets;
-
+    SplitVector<size_t> MeshletTriangles;
     std::vector<size_t> MeshletParents1;
 
-    std::vector<MeshEdge> MeshletEdges;
-    std::vector<size_t>   MeshletEdgeOffsets;
-
-    std::unordered_map<MeshEdge, TrivialVector<size_t, 2>, MeshEdgeHasher> EdgeMeshlets;
-
-    size_t MeshletSize(size_t iMeshlet) const noexcept
-    {
-        return MeshletTriangleOffsets[iMeshlet + 1] - MeshletTriangleOffsets[iMeshlet];
-    }
+    SplitVector<MeshEdge> MeshletEdges;
+    EdgeIndicesMap<2>     EdgeMeshlets;
 
     size_t LayerMeshletCount(size_t iLayer) const noexcept
     {
@@ -350,20 +417,21 @@ struct IntermediateMesh
         }
     }
 
-    void BuildTriangleEdgeIndex()
+    EdgeIndicesMap<2> BuildTriangleEdgeIndex(Slice<IndexTriangle> triangles)
     {
-        size_t nTriangles = Triangles.size();
-        for (size_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
+        EdgeIndicesMap<2> edgeTriangles;
+        for (size_t iTriangle = 0; iTriangle < triangles.Size(); ++iTriangle)
         {
             for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
             {
-                MeshEdge edge        = Triangles[iTriangle].EdgeKey(iTriEdge);
-                auto [iter, isFirst] = EdgeTriangles.try_emplace(edge);
+                MeshEdge edge        = triangles[iTriangle].EdgeKey(iTriEdge);
+                auto [iter, isFirst] = edgeTriangles.try_emplace(edge);
                 auto &vec            = iter->second;
                 ASSERT(!vec.LastEquals(iTriangle));
                 vec.Push(iTriangle);
             }
         }
+        return edgeTriangles;
     }
 
     void DoFirstPartition(idx_t nMeshlets)
@@ -377,6 +445,8 @@ struct IntermediateMesh
             std::fill(TriangleMeshlet.begin(), TriangleMeshlet.end(), IDX_C(0));
             return;
         }
+
+        auto edgeTriangles = BuildTriangleEdgeIndex(Triangles);
 
         // std::cout << "Preparing METIS structure...\n";
         idx_t nvtxs = nTriangles;
@@ -399,7 +469,7 @@ struct IntermediateMesh
                 MeshEdge edge  = Triangles[iTriangle].EdgeKey(iTriEdge);
                 size_t   iVert = edge.first;
                 size_t   jVert = edge.second;
-                auto    &vec   = EdgeTriangles[edge];
+                auto    &vec   = edgeTriangles[edge];
 
                 float3   posi   = Vertices[iVert].m.Position;
                 float3   posj   = Vertices[jVert].m.Position;
@@ -418,8 +488,6 @@ struct IntermediateMesh
             }
             xadj.push_back(idx_t(adjncy.size()));
         }
-        for (idx_t i = nTriangles; i < nvtxs; ++i)
-            xadj.push_back(idx_t(adjncy.size()));
 
         idx_t edgecut = 0;
 
@@ -458,8 +526,8 @@ struct IntermediateMesh
                                               TriangleMeshlet.data() /* part */);
         ASSERT(metisResult == METIS_OK);
 
-        GroupWithOffsets(nMeshlets, TriangleMeshlet, MeshletTriangleOffsets, MeshletTriangles);
-        MeshletParents1 = std::vector<size_t>(nMeshlets, 0);
+        MeshletTriangles = SplitVector<size_t>(nMeshlets, Slice(TriangleMeshlet));
+        MeshletParents1  = std::vector<size_t>(nMeshlets, 0);
     }
 
     void BuildMeshletEdgeIndex(size_t iLayer)
@@ -468,20 +536,15 @@ struct IntermediateMesh
         size_t layerEnd  = MeshletLayerOffsets[iLayer + 1];
         size_t nMeshlets = layerEnd - layerBeg;
 
-        MeshletEdges.clear();
-        MeshletEdgeOffsets.clear();
+        MeshletEdges.Clear();
         EdgeMeshlets.clear();
 
-        MeshletEdgeOffsets.push_back(0);
         for (size_t iMeshlet = layerBeg; iMeshlet < layerEnd; ++iMeshlet)
         {
-            size_t                iiMeshlet  = iMeshlet - layerBeg;
-            size_t                meshletBeg = MeshletTriangleOffsets[iMeshlet];
-            size_t                meshletEnd = MeshletTriangleOffsets[iMeshlet + 1];
+            size_t                iiMeshlet = iMeshlet - layerBeg;
             std::vector<MeshEdge> seenEdges;
-            for (size_t iiTriangle = meshletBeg; iiTriangle < meshletEnd; ++iiTriangle)
+            for (size_t iTriangle : MeshletTriangles[iMeshlet])
             {
-                size_t iTriangle = MeshletTriangles[iiTriangle];
                 for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
                 {
                     MeshEdge edge        = Triangles[iTriangle].EdgeKey(iTriEdge);
@@ -495,8 +558,9 @@ struct IntermediateMesh
 
             std::sort(seenEdges.begin(), seenEdges.end());
             seenEdges.erase(std::unique(seenEdges.begin(), seenEdges.end()), seenEdges.end());
-            MeshletEdges.insert(MeshletEdges.end(), seenEdges.begin(), seenEdges.end());
-            MeshletEdgeOffsets.push_back(MeshletEdges.size());
+            for (MeshEdge &edge : seenEdges)
+                MeshletEdges.Push(edge);
+            MeshletEdges.PushSplit();
         }
     }
 
@@ -524,13 +588,10 @@ struct IntermediateMesh
             for (size_t iMeshlet = layerBeg; iMeshlet < layerEnd; ++iMeshlet)
             {
                 size_t iiMeshlet = iMeshlet - layerBeg;
-                size_t edgesBeg  = MeshletEdgeOffsets[iiMeshlet];
-                size_t edgesEnd  = MeshletEdgeOffsets[iiMeshlet];
 
                 // Пометим все смежные мешлеты как непосещённые
-                for (size_t iEdge = edgesBeg; iEdge < edgesEnd; ++iEdge)
+                for (MeshEdge edge : MeshletEdges[iiMeshlet])
                 {
-                    MeshEdge edge = MeshletEdges[iEdge];
                     for (size_t jjMeshlet : EdgeMeshlets[edge])
                     {
                         if (jjMeshlet != iiMeshlet)
@@ -539,9 +600,8 @@ struct IntermediateMesh
                 }
 
                 // Посчитаем веса рёбер как количество смежных рёбер сетки
-                for (size_t iEdge = edgesBeg; iEdge < edgesEnd; ++iEdge)
+                for (MeshEdge edge : MeshletEdges[iiMeshlet])
                 {
-                    MeshEdge edge = MeshletEdges[iEdge];
                     for (size_t jjMeshlet : EdgeMeshlets[edge])
                     {
                         if (jjMeshlet != iiMeshlet)
@@ -550,9 +610,8 @@ struct IntermediateMesh
                 }
 
                 // Посчитаем веса рёбер как количество смежных рёбер сетки
-                for (size_t iEdge = edgesBeg; iEdge < edgesEnd; ++iEdge)
+                for (MeshEdge edge : MeshletEdges[iiMeshlet])
                 {
-                    MeshEdge edge = MeshletEdges[iEdge];
                     for (size_t jjMeshlet : EdgeMeshlets[edge])
                     {
                         if (jjMeshlet != iiMeshlet && commonEdgesWith[jjMeshlet] != 0)
@@ -589,9 +648,7 @@ struct IntermediateMesh
             ASSERT(metisResult == METIS_OK);
         }
 
-        std::vector<size_t> partOffsets;
-        std::vector<size_t> partMeshlets;
-        GroupWithOffsets(nParts, meshletPart, partOffsets, partMeshlets);
+        SplitVector<size_t> meshlets(nParts, Slice(meshletPart));
 
         for (size_t iMeshlet = layerBeg; iMeshlet < layerEnd; ++iMeshlet)
         {
@@ -604,18 +661,13 @@ struct IntermediateMesh
 
         // Децимация
         for (size_t iPart = 0; iPart < nParts; ++iPart)
-        {
-            size_t partBeg  = partOffsets[iPart];
-            size_t partEnd  = partOffsets[iPart + 1];
-            size_t partSize = partEnd - partBeg;
-            DecimateSuperMeshlet(&partMeshlets[partBeg], partSize);
-        }
+            DecimateSuperMeshlet(meshlets[iPart]);
 
         // Каждая часть становится двумя новыми мешлетами
         MeshletLayerOffsets.push_back(layerEnd + 2 * nParts);
     }
 
-    void DecimateSuperMeshlet(size_t *baseMeshlets, size_t nBaseMeshlets)
+    void DecimateSuperMeshlet(Slice<size_t> baseMeshlets)
     {
         // TODO: Квадрики
         // TODO: Оптимизировать поиск граничных рёбер
@@ -626,15 +678,11 @@ struct IntermediateMesh
         std::unordered_set<MeshEdge, MeshEdgeHasher> dbgUsedEdges;
 
         // Помечаем вершины для сбора, собираем треугольники
-        for (size_t iiMeshlet = 0; iiMeshlet < nBaseMeshlets; ++iiMeshlet)
+        for (size_t iMeshlet : baseMeshlets)
         {
-            size_t iMeshlet   = baseMeshlets[iiMeshlet];
-            size_t meshletBeg = MeshletTriangleOffsets[iMeshlet];
-            size_t meshletEnd = MeshletTriangleOffsets[iMeshlet + 1];
-            for (size_t iiTriangle = meshletBeg; iiTriangle < meshletEnd; ++iiTriangle)
+            for (size_t iTriangle : MeshletTriangles[iMeshlet])
             {
-                size_t        iTriangle = MeshletTriangles[iiTriangle];
-                IndexTriangle tri       = Triangles[iTriangle];
+                IndexTriangle tri = Triangles[iTriangle];
                 for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
                 {
                     size_t iVert               = tri.idx[iTriVert];
@@ -764,24 +812,13 @@ struct IntermediateMesh
 
         ASSERT(dbgUsedEdges.empty());
 
-        size_t nTrisLeft = MeshletTriangles.size() - MeshletTriangleOffsets[MeshletTriangleOffsets.size() - 1];
+        // size_t nTrisLeft = MeshletTriangles.size() - MeshletTriangleOffsets[MeshletTriangleOffsets.size() - 1];
         // std::cout << "Collapsed " << nCollapsed << " out of " << edgeTriangleCount.size() << " edges, " << nTrisLeft
         //           << " triangles out of " << locTriangles.size() << " left\n";
 
         // Разбиваем децимированный мешлет на два
 
-        std::unordered_map<MeshEdge, TrivialVector<size_t, 2>, MeshEdgeHasher> locEdgeTriangles;
-        for (size_t iTriangle = 0; iTriangle < resultTriangles.size(); ++iTriangle)
-        {
-            for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
-            {
-                MeshEdge edge        = resultTriangles[iTriangle].EdgeKey(iTriEdge);
-                auto [iter, isFirst] = locEdgeTriangles.try_emplace(edge);
-                auto &vec            = iter->second;
-                ASSERT(!vec.LastEquals(iTriangle));
-                vec.Push(iTriangle);
-            }
-        }
+        EdgeIndicesMap<2> edgeTriangles = BuildTriangleEdgeIndex(resultTriangles);
 
         idx_t nvtxs = resultTriangles.size();
         idx_t ncon  = 1;
@@ -796,7 +833,7 @@ struct IntermediateMesh
             for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
             {
                 MeshEdge edge = resultTriangles[iTriangle].EdgeKey(iTriEdge);
-                auto    &vec  = locEdgeTriangles[edge];
+                auto    &vec  = edgeTriangles[edge];
                 for (size_t jTriangle : vec)
                 {
                     if (jTriangle == iTriangle)
@@ -839,10 +876,10 @@ struct IntermediateMesh
             {
                 if (part[iTriangle] != iPart)
                     continue;
-                MeshletTriangles.push_back(Triangles.size());
+                MeshletTriangles.Push(Triangles.size());
                 Triangles.push_back(resultTriangles[iTriangle]);
             }
-            MeshletTriangleOffsets.push_back(MeshletTriangles.size());
+            MeshletTriangles.PushSplit();
             MeshletParents1.push_back(0);
         }
     }
@@ -856,13 +893,9 @@ struct IntermediateMesh
 
         for (idx_t iMeshlet = 0; iMeshlet < nMeshlets; ++iMeshlet)
         {
-            size_t meshletBeg = MeshletTriangleOffsets[iMeshlet];
-            size_t meshletEnd = MeshletTriangleOffsets[iMeshlet + 1];
-
             // Помечаем каждую вершину мешлета как ещё не использованную в этом мешлете
-            for (size_t iiTriangle = meshletBeg; iiTriangle < meshletEnd; ++iiTriangle)
+            for (size_t iTriangle : MeshletTriangles[iMeshlet])
             {
-                size_t iTriangle = MeshletTriangles[iiTriangle];
                 for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
                 {
                     size_t iVert               = Triangles[iTriangle].idx[iTriVert];
@@ -873,15 +906,14 @@ struct IntermediateMesh
             MeshletDesc meshlet = {};
             meshlet.VertOffset  = outModel.GlobalIndices.size();
             meshlet.VertCount   = 0;
-            meshlet.PrimOffset  = meshletBeg;
-            meshlet.PrimCount   = meshletEnd - meshletBeg;
+            meshlet.PrimOffset  = MeshletTriangles.Split(iMeshlet);
+            meshlet.PrimCount   = MeshletTriangles.PartSize(iMeshlet);
             meshlet.Parent1     = MeshletParents1[iMeshlet];
             meshlet.Parent2     = meshlet.Parent1 == 0 ? 0 : meshlet.Parent1 + 1;
 
-            for (size_t iiTriangle = meshletBeg; iiTriangle < meshletEnd; ++iiTriangle)
+            for (size_t iTriangle : MeshletTriangles[iMeshlet])
             {
-                size_t iTriangle       = MeshletTriangles[iiTriangle];
-                uint   encodedTriangle = 0;
+                uint encodedTriangle = 0;
                 for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
                 {
                     size_t iVert    = Triangles[iTriangle].idx[iTriVert];
@@ -919,20 +951,17 @@ int main()
     IntermediateMesh mesh;
 
     std::cout << "Loading model...\n";
-    mesh.LoadGLB("input.glb");
+    mesh.LoadGLB("plane.glb");
     std::cout << "Loading model done\n";
 
     size_t nVertices  = mesh.Vertices.size();
     size_t nTriangles = mesh.Triangles.size();
 
-    std::cout << "Building triangle edge index...\n";
-    mesh.BuildTriangleEdgeIndex();
-    std::cout << "Building triangle edge index done\n";
-
     if constexpr (false)
     {
+        auto edgeTriangles = mesh.BuildTriangleEdgeIndex(mesh.Triangles);
         std::cout << "\nBy edge:\n";
-        for (auto &[edge, tris] : mesh.EdgeTriangles)
+        for (auto &[edge, tris] : edgeTriangles)
         {
             std::cout << "V[" << edge.first << ", " << edge.second << "]: T[";
             for (size_t i = 0; i < tris.Size; ++i)
@@ -959,7 +988,9 @@ int main()
             std::cout << "T[" << iTriangle << "] => " << mesh.TriangleMeshlet[iTriangle] << '\n';
     }
 
-    for (size_t iLayer = 0; mesh.LayerMeshletCount(iLayer) > 2; ++iLayer)
+    for (size_t iLayer = 0;
+         /* При втором разделении возникают дырки */ iLayer < 2 && mesh.LayerMeshletCount(iLayer) > 2;
+         ++iLayer)
     {
         // std::cout << "Building meshlet-edge index...\n";
         mesh.BuildMeshletEdgeIndex(iLayer);
@@ -981,7 +1012,7 @@ int main()
     {
         for (size_t iMeshlet = 0; iMeshlet < nMeshlets; ++iMeshlet)
         {
-            size_t meshletSize = mesh.MeshletSize(iMeshlet);
+            size_t meshletSize = mesh.MeshletTriangles.PartSize(iMeshlet);
             if (meshletSize > MESHLET_MAX_PRIMITIVES)
                 std::cout << "Meshlet[" << iMeshlet << "].Size = " << meshletSize << "\n";
         }
