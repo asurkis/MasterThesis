@@ -95,7 +95,7 @@ void ModelCPU::LoadFromFile(const std::filesystem::path &path)
                 aabbParent.Max.x = XMMax(aabbParent.Max.x, aabb.Max.x);
                 aabbParent.Max.y = XMMax(aabbParent.Max.y, aabb.Max.y);
                 aabbParent.Max.z = XMMax(aabbParent.Max.z, aabb.Max.z);
-                Meshlets[iParent].ChildrenCount++;
+                Meshlets[iParent].Height = std::max(Meshlets[iParent].Height, meshlet.Height + 1);
             }
         }
     }

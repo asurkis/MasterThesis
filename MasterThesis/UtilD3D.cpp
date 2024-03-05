@@ -371,6 +371,14 @@ void ModelGPU::Upload(const ModelCPU &model)
         pFence->SetEventOnCompletion(1, hEvent.Get());
         WaitForSingleObjectEx(hEvent.Get(), INFINITE, FALSE);
     }
+
+    mMaxLayer = 0;
+    for (size_t iMesh = 0; iMesh < meshes.size(); ++iMesh)
+    {
+        size_t iLastMeshlet = meshes[iMesh].MeshletCount - 1;
+        uint   iLayer       = model.Meshlets[iLastMeshlet].Height;
+        mMaxLayer           = (std::max)(mMaxLayer, iLayer);
+    }
 }
 
 void ModelGPU::Render()

@@ -141,6 +141,13 @@ template <typename T> struct Slice
     size_t mSize;
 };
 
+template <typename T> Slice<T> Split(Slice<T> items, Slice<size_t> splits, size_t i)
+{
+    size_t beg = splits[i];
+    size_t end = splits[i + 1];
+    return items.Subslice(beg, end);
+}
+
 template <typename T> struct SplitVector
 {
     SplitVector()                               = default;
@@ -173,17 +180,9 @@ template <typename T> struct SplitVector
         }
     }
 
-    Slice<T> Part(size_t iPart)
-    {
-        size_t beg = mSplits[iPart];
-        size_t end = mSplits[iPart + 1];
-        return Slice(mVec).Subslice(beg, end);
-    }
-
-    size_t PartSize(size_t iPart) const { return mSplits[iPart + 1] - mSplits[iPart]; }
-    size_t PartCount() const noexcept { return mSplits.size() - 1; }
-
-    Slice<T> operator[](size_t iPart) { return Part(iPart); }
+    size_t   PartSize(size_t iPart) const { return mSplits[iPart + 1] - mSplits[iPart]; }
+    size_t   PartCount() const noexcept { return mSplits.size() - 1; }
+    Slice<T> operator[](size_t iPart) { return ::Split(Slice(mVec), Slice(mSplits), iPart); }
 
     T       &Flat(size_t i) { return mVec[i]; }
     const T &Flat(size_t i) const { return mVec[i]; }
@@ -664,11 +663,31 @@ struct IntermediateMesh
             DecimateSuperMeshlet(meshlets[iPart]);
 
         // Каждая часть становится двумя новыми мешлетами
-        MeshletLayerOffsets.push_back(layerEnd + 2 * nParts);
+        MeshletLayerOffsets.push_back(MeshletTriangles.PartCount());
     }
 
     void DecimateSuperMeshlet(Slice<size_t> baseMeshlets)
     {
+#if false
+        for (size_t iMeshlet : baseMeshlets)
+        {
+            // Нельзя использовать Slice
+            size_t meshletBeg = MeshletTriangles.Split(iMeshlet);
+            size_t meshletEnd = MeshletTriangles.Split(iMeshlet + 1);
+            for (size_t iiTriangle = meshletBeg; iiTriangle < meshletEnd; ++iiTriangle)
+            {
+                size_t iTriangle = MeshletTriangles.Flat(iiTriangle);
+                MeshletTriangles.Push(iTriangle);
+            }
+            MeshletParents1[iMeshlet] = MeshletParents1.size();
+            MeshletTriangles.PushSplit();
+            MeshletTriangles.PushSplit();
+            MeshletParents1.push_back(0);
+            MeshletParents1.push_back(0);
+        }
+        return;
+#endif
+
         // TODO: Квадрики
         // TODO: Оптимизировать поиск граничных рёбер
         std::vector<IntermediateVertex>                      locVertices;

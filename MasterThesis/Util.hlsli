@@ -23,18 +23,10 @@ struct TMeshlet
     uint VertOffset;
     uint PrimCount;
     uint PrimOffset;
-    uint ChildrenOffset;
-    uint ChildrenCount;
     uint Parent1;
     uint Parent2;
-};
-
-struct TMeshletNode
-{
-    uint ChildrenOffset;
-    uint ChildrenCount;
-    uint Parent1;
-    uint Parent2;
+    uint Height;
+    uint _padding;
 };
 
 struct TBoundingBox
@@ -48,6 +40,8 @@ struct TMesh
     uint MeshletCount;
     uint MeshletOffset;
     uint RadiusThresholdMicro;
+    // Установка всех битов --- нормальная отрисовка
+    uint RenderLayer;
 };
 
 struct TPayload

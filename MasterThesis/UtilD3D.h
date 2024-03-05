@@ -55,11 +55,14 @@ class ModelGPU
     PResource pPrimitives;
     PResource pMeshlets;
     PResource pMeshletBoxes;
+    uint      mMaxLayer;
 
     // Пока поддерживаем отрисовку только одного меша за раз
     std::vector<MeshDesc> meshes;
 
   public:
+    constexpr uint MaxLayer() const noexcept { return mMaxLayer; }
+
     void Upload(const ModelCPU &model);
     void Render();
 };

@@ -16,10 +16,10 @@ struct MeshletDesc
     uint VertOffset;
     uint PrimCount;
     uint PrimOffset;
-    uint ChildrenOffset;
-    uint ChildrenCount;
     uint Parent1;
     uint Parent2;
+    uint Height;
+    uint _padding;
 };
 
 struct BoundingBox
