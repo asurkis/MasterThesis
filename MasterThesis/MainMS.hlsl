@@ -19,16 +19,41 @@ uint GetVertexIndex(TMeshlet m, uint localIndex)
     return GlobalIndices[m.VertOffset + localIndex];
 }
 
-TVertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
+TVertexOut GetVertexAttributes(uint iMeshlet, TMeshlet meshlet, uint iLocVert)
 {
-    TVertex v = Vertices[vertexIndex];
+    uint iParent = meshlet.Parent1;
+    uint iVert = GetVertexIndex(meshlet, iLocVert);
+    bool isBorder = (iVert & 0x80000000) != 0;
+    iVert &= 0x7FFFFFFF;
+    TVertex v = Vertices[iVert];
 
     TVertexOut vout;
     vout.PositionVS = mul(float4(v.Position, 1), Camera.MatView).xyz;
     vout.PositionHS = mul(float4(v.Position, 1), Camera.MatViewProj);
     vout.Normal = mul(float4(v.Normal, 0), Camera.MatNormal).xyz;
-    vout.MeshletIndex = meshletIndex;
-    // vout.Normal       = v.Normal;
+    
+    if (MeshInfo.DisplayType == 0xFFFFFFFF)
+    {
+        vout.DiffuseColor = PaletteColor(iMeshlet);
+    }
+    else
+    {
+        switch (MeshInfo.DisplayType % 3)
+        {
+            case 0:
+                if (isBorder)
+                    vout.DiffuseColor = 0.xxx;
+                else
+                    vout.DiffuseColor = PaletteColor(iMeshlet);
+                break;
+            case 1:
+                vout.DiffuseColor = PaletteColor(iMeshlet);
+                break;
+            case 2:
+                vout.DiffuseColor = PaletteColor(iParent);
+                break;
+        }
+    }
 
     return vout;
 }
@@ -56,15 +81,9 @@ void main(
     // Повторим код 2 раза, чтобы не было менее предсказуемого цикла
     iLocVert = gtid;
     if (iLocVert < m.VertCount)
-    {
-        uint iVert = GetVertexIndex(m, iLocVert);
-        verts[iLocVert] = GetVertexAttributes(iMeshlet, iVert);
-    }
+        verts[iLocVert] = GetVertexAttributes(iMeshlet, m, iLocVert);
     
     iLocVert = gtid + 128;
     if (iLocVert < m.VertCount)
-    {
-        uint iVert = GetVertexIndex(m, iLocVert);
-        verts[iLocVert] = GetVertexAttributes(iMeshlet, iVert);
-    }
+        verts[iLocVert] = GetVertexAttributes(iMeshlet, m, iLocVert);
 }

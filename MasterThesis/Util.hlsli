@@ -40,8 +40,8 @@ struct TMesh
     uint MeshletCount;
     uint MeshletOffset;
     uint RadiusThresholdMicro;
-    // Установка всех битов --- нормальная отрисовка
-    uint RenderLayer;
+    // 0 --- нормальная отрисовка
+    uint DisplayType;
 };
 
 struct TPayload

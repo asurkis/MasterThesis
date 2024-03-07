@@ -13,8 +13,6 @@ float4 main(TVertexOut input) : SV_Target
     float3 lightColor = float3(1, 1, 1);
     float3 lightDir = -normalize(float3(-1, -1, -10));
 
-    uint meshletIndex = input.MeshletIndex;
-    float3 diffuseColor = PaletteColor(meshletIndex);
     float shininess = 16.0;
 
     float3 normal = normalize(input.Normal);
@@ -28,7 +26,7 @@ float4 main(TVertexOut input) : SV_Target
     blinnTerm = cosAngle != 0.0 ? blinnTerm : 0.0;
     blinnTerm = pow(blinnTerm, shininess);
 
-    float3 finalColor = (cosAngle + blinnTerm + ambientIntensity) * diffuseColor;
+    float3 finalColor = (cosAngle + blinnTerm + ambientIntensity) * input.DiffuseColor;
     
     return float4(finalColor, 1);
 }

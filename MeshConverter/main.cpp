@@ -930,6 +930,26 @@ struct IntermediateMesh
             meshlet.Parent1     = MeshletParents1[iMeshlet];
             meshlet.Parent2     = meshlet.Parent1 == 0 ? 0 : meshlet.Parent1 + 1;
 
+            // Для отладки закодируем, какие вершины у мешлета --- граничные
+            std::unordered_map<MeshEdge, size_t, MeshEdgeHasher> edgeTriangleCount;
+            for (size_t iTriangle : MeshletTriangles[iMeshlet])
+            {
+                for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
+                {
+                    MeshEdge edge        = Triangles[iTriangle].EdgeKey(iTriEdge);
+                    auto [iter, isFirst] = edgeTriangleCount.try_emplace(edge, 0);
+                    iter->second++;
+                }
+            }
+            std::unordered_set<size_t> borderVertices;
+            for (auto &[edge, nTris] : edgeTriangleCount)
+            {
+                if (nTris >= 2)
+                    continue;
+                for (size_t iVert : {edge.first, edge.second})
+                    borderVertices.insert(nTris);
+            }
+
             for (size_t iTriangle : MeshletTriangles[iMeshlet])
             {
                 uint encodedTriangle = 0;
@@ -943,7 +963,10 @@ struct IntermediateMesh
                     {
                         iLocVert                   = meshlet.VertCount++;
                         Vertices[iVert].OtherIndex = iLocVert;
-                        outModel.GlobalIndices.push_back(iVert);
+                        if (borderVertices.find(iVert) != borderVertices.end())
+                            outModel.GlobalIndices.push_back(iVert | UINT32_C(0x80000000));
+                        else
+                            outModel.GlobalIndices.push_back(iVert);
                     }
                     encodedTriangle |= iLocVert << (10 * iTriVert);
                 }

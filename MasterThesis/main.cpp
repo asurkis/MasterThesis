@@ -34,7 +34,7 @@ float    camSpeed  = 10.0f;
 float    camOffset = 3.0f;
 
 float meshletThreshold = 0.25f;
-int   meshletLayer = -1;
+int   displayType      = -1;
 
 bool drawModel       = true;
 bool drawMeshletAABB = false;
@@ -164,7 +164,7 @@ void FillCommandList()
     if (drawModel)
     {
         pCommandList->SetGraphicsRoot32BitConstant(1, 1e6f * meshletThreshold, 2);
-        pCommandList->SetGraphicsRoot32BitConstant(1, meshletLayer < 0 ? UINT32_MAX : meshletLayer, 3);
+        pCommandList->SetGraphicsRoot32BitConstant(1, displayType < 0 ? UINT32_MAX : displayType, 3);
         model.Render();
     }
 
@@ -172,7 +172,7 @@ void FillCommandList()
     {
         pCommandList->SetPipelineState(aabbPipeline.GetStateRaw());
         pCommandList->SetGraphicsRoot32BitConstant(1, 1e6f * meshletThreshold, 2);
-        pCommandList->SetGraphicsRoot32BitConstant(1, meshletLayer < 0 ? UINT32_MAX : meshletLayer, 3);
+        pCommandList->SetGraphicsRoot32BitConstant(1, displayType < 0 ? UINT32_MAX : displayType, 3);
         model.Render();
     }
 
@@ -211,7 +211,7 @@ void OnRender()
     ImGui::Checkbox("Draw model", &drawModel);
     ImGui::Checkbox("Draw meshlet AABB", &drawMeshletAABB);
     ImGui::SliderFloat("Meshlet threshold", &meshletThreshold, 0.1f, 2.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-    ImGui::SliderInt("Meshlet layer", &meshletLayer, -1, model.MaxLayer());
+    ImGui::SliderInt("Meshlet layer", &displayType, -1, 3 * model.MaxLayer() + 1);
     ImGui::End();
 
     float aspect    = float(WindowWidth) / float(WindowHeight);
