@@ -51,21 +51,15 @@ void ModelCPU::LoadFromFile(const std::filesystem::path &path)
     {
         const MeshletDesc &meshlet = Meshlets[iMeshlet];
         BoundingBox       &aabb    = MeshletBoxes[iMeshlet];
-        if (meshlet.VertCount <= 0)
-        {
-            aabb.Min = float3(0.0f, 0.0f, 0.0f);
-            aabb.Max = float3(0.0f, 0.0f, 0.0f);
-            continue;
-        }
 
-        uint iVert = GlobalIndices[meshlet.VertOffset];
-        aabb.Min   = Vertices[iVert].Position;
-        aabb.Max   = aabb.Min;
-        for (uint iMeshletVert = 1; iMeshletVert < meshlet.VertCount; ++iMeshletVert)
+        aabb.Min = float3(INFINITY, INFINITY, INFINITY);
+        aabb.Max = float3(-INFINITY, -INFINITY, -INFINITY);
+
+        for (uint iMeshletVert = 0; iMeshletVert < meshlet.VertCount; ++iMeshletVert)
         {
-            iVert              = GlobalIndices[meshlet.VertOffset + iMeshletVert];
-            const Vertex &vert = Vertices[iVert];
-            const float3 &pos  = vert.Position;
+            uint          iVert = GlobalIndices[meshlet.VertOffset + iMeshletVert];
+            const Vertex &vert  = Vertices[iVert & UINT32_C(0x7FFFFFFF)];
+            const float3 &pos   = vert.Position;
 
             aabb.Min.x = XMMin(aabb.Min.x, pos.x);
             aabb.Min.y = XMMin(aabb.Min.y, pos.y);

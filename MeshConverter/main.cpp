@@ -286,6 +286,8 @@ struct IntermediateMesh
     SplitVector<MeshEdge> MeshletEdges;
     EdgeIndicesMap<2>     EdgeMeshlets;
 
+    std::vector<size_t> dbgVertexMeshletCount;
+
     size_t LayerMeshletCount(size_t iLayer) const noexcept
     {
         return MeshletLayerOffsets[iLayer + 1] - MeshletLayerOffsets[iLayer];
@@ -552,7 +554,7 @@ struct IntermediateMesh
         {
             size_t                iiMeshlet = iMeshlet - layerBeg;
             std::vector<MeshEdge> seenEdges;
-            for (IndexTriangle tri : MeshletTriangles[iMeshlet])
+            for (IndexTriangle &tri : MeshletTriangles[iMeshlet])
             {
                 for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
                 {
@@ -573,91 +575,96 @@ struct IntermediateMesh
         }
     }
 
-    void PartitionMeshlets(size_t iLayer)
+    bool PartitionMeshlets()
     {
+        size_t iLayer   = MeshletLayerOffsets.size() - 2;
         size_t layerBeg = MeshletLayerOffsets[iLayer];
         size_t layerEnd = MeshletLayerOffsets[iLayer + 1];
+
+        // std::cout << "Building meshlet-edge index...\n";
+        BuildMeshletEdgeIndex(iLayer);
+        // std::cout << "Building meshlet-edge index done\n";
 
         idx_t              nMeshlets = layerEnd - layerBeg;
         idx_t              nParts    = (nMeshlets + 3) / 4;
         std::vector<idx_t> meshletPart(nMeshlets, 0);
 
-        if (nParts > 1)
+        if (nParts < 2)
+            return false;
+
+        idx_t ncon = 1;
+
+        std::vector<idx_t> xadj;
+        xadj.reserve(nMeshlets + 1);
+        xadj.push_back(0);
+
+        std::vector<idx_t> adjncy;
+        std::vector<idx_t> adjwgt;
+
+        std::vector<idx_t> commonEdgesWith(nMeshlets, 0);
+        for (size_t iMeshlet = layerBeg; iMeshlet < layerEnd; ++iMeshlet)
         {
-            idx_t ncon = 1;
+            size_t iiMeshlet = iMeshlet - layerBeg;
 
-            std::vector<idx_t> xadj;
-            xadj.reserve(nMeshlets + 1);
-            xadj.push_back(0);
-
-            std::vector<idx_t> adjncy;
-            std::vector<idx_t> adjwgt;
-
-            std::vector<idx_t> commonEdgesWith(nMeshlets, 0);
-            for (size_t iMeshlet = layerBeg; iMeshlet < layerEnd; ++iMeshlet)
+            // Пометим все смежные мешлеты как непосещённые
+            for (MeshEdge edge : MeshletEdges[iiMeshlet])
             {
-                size_t iiMeshlet = iMeshlet - layerBeg;
-
-                // Пометим все смежные мешлеты как непосещённые
-                for (MeshEdge edge : MeshletEdges[iiMeshlet])
+                for (size_t jjMeshlet : EdgeMeshlets[edge])
                 {
-                    for (size_t jjMeshlet : EdgeMeshlets[edge])
-                    {
-                        if (jjMeshlet != iiMeshlet)
-                            commonEdgesWith[jjMeshlet] = 0;
-                    }
+                    if (jjMeshlet != iiMeshlet)
+                        commonEdgesWith[jjMeshlet] = 0;
                 }
-
-                // Посчитаем веса рёбер как количество смежных рёбер сетки
-                for (MeshEdge edge : MeshletEdges[iiMeshlet])
-                {
-                    for (size_t jjMeshlet : EdgeMeshlets[edge])
-                    {
-                        if (jjMeshlet != iiMeshlet)
-                            commonEdgesWith[jjMeshlet]++;
-                    }
-                }
-
-                // Посчитаем веса рёбер как количество смежных рёбер сетки
-                for (MeshEdge edge : MeshletEdges[iiMeshlet])
-                {
-                    for (size_t jjMeshlet : EdgeMeshlets[edge])
-                    {
-                        if (jjMeshlet != iiMeshlet && commonEdgesWith[jjMeshlet] != 0)
-                        {
-                            adjncy.push_back(jjMeshlet);
-                            adjwgt.push_back(commonEdgesWith[jjMeshlet]);
-                            commonEdgesWith[jjMeshlet] = 0;
-                        }
-                    }
-                }
-
-                xadj.push_back(adjncy.size());
             }
 
-            idx_t options[METIS_NOPTIONS] = {};
-            METIS_SetDefaultOptions(options);
-            options[METIS_OPTION_NUMBERING] = 0;
+            // Посчитаем веса рёбер как количество смежных рёбер сетки
+            for (MeshEdge edge : MeshletEdges[iiMeshlet])
+            {
+                for (size_t jjMeshlet : EdgeMeshlets[edge])
+                {
+                    if (jjMeshlet != iiMeshlet)
+                        commonEdgesWith[jjMeshlet]++;
+                }
+            }
 
-            idx_t edgecut = 0;
+            // Посчитаем веса рёбер как количество смежных рёбер сетки
+            for (MeshEdge edge : MeshletEdges[iiMeshlet])
+            {
+                for (size_t jjMeshlet : EdgeMeshlets[edge])
+                {
+                    if (jjMeshlet != iiMeshlet && commonEdgesWith[jjMeshlet] != 0)
+                    {
+                        adjncy.push_back(jjMeshlet);
+                        adjwgt.push_back(commonEdgesWith[jjMeshlet]);
+                        commonEdgesWith[jjMeshlet] = 0;
+                    }
+                }
+            }
 
-            int metisResult = METIS_PartGraphKway(&nMeshlets /* nvtxs */,
-                                                  &ncon /* ncon */,
-                                                  xadj.data(),
-                                                  adjncy.data(),
-                                                  nullptr /* vwgt */,
-                                                  nullptr /* vsize */,
-                                                  adjwgt.data(),
-                                                  &nParts,
-                                                  nullptr /* tpwgts */,
-                                                  nullptr /* ubvec */,
-                                                  options,
-                                                  &edgecut,
-                                                  meshletPart.data() /* part */);
-            ASSERT(metisResult == METIS_OK);
+            xadj.push_back(adjncy.size());
         }
 
-        SplitVector<size_t> meshlets(nParts, Slice(meshletPart));
+        idx_t options[METIS_NOPTIONS] = {};
+        METIS_SetDefaultOptions(options);
+        options[METIS_OPTION_NUMBERING] = 0;
+
+        idx_t edgecut = 0;
+
+        int metisResult = METIS_PartGraphKway(&nMeshlets /* nvtxs */,
+                                              &ncon /* ncon */,
+                                              xadj.data(),
+                                              adjncy.data(),
+                                              nullptr /* vwgt */,
+                                              nullptr /* vsize */,
+                                              adjwgt.data(),
+                                              &nParts,
+                                              nullptr /* tpwgts */,
+                                              nullptr /* ubvec */,
+                                              options,
+                                              &edgecut,
+                                              meshletPart.data() /* part */);
+        ASSERT(metisResult == METIS_OK);
+
+        SplitVector<size_t> partMeshlets(nParts, Slice(meshletPart));
 
         for (size_t iMeshlet = layerBeg; iMeshlet < layerEnd; ++iMeshlet)
         {
@@ -668,16 +675,52 @@ struct IntermediateMesh
             MeshletParents1[iMeshlet] = layerEnd + 2 * iPart;
         }
 
+        // Отладочный второй способ подсчёта граничных вершин
+        dbgVertexMeshletCount.resize(Vertices.size());
+        std::fill(dbgVertexMeshletCount.begin(), dbgVertexMeshletCount.end(), 0);
+        for (size_t iPart = 0; iPart < nParts; ++iPart)
+        {
+            for (size_t iiMeshlet : partMeshlets[iPart])
+            {
+                size_t iMeshlet = layerBeg + iiMeshlet;
+                for (IndexTriangle &tri : MeshletTriangles[iMeshlet])
+                {
+                    for (size_t iVert : tri.idx)
+                        Vertices[iVert].OtherIndex = UINT32_MAX;
+                }
+            }
+            for (size_t iiMeshlet : partMeshlets[iPart])
+            {
+                size_t iMeshlet = layerBeg + iiMeshlet;
+                for (IndexTriangle &tri : MeshletTriangles[iMeshlet])
+                {
+                    for (size_t iVert : tri.idx)
+                    {
+                        if (Vertices[iVert].OtherIndex == UINT32_MAX)
+                        {
+                            dbgVertexMeshletCount[iVert]++;
+                            Vertices[iVert].OtherIndex = 0;
+                        }
+                        ASSERT(dbgVertexMeshletCount[iVert] > 0);
+                    }
+                }
+            }
+        }
+
         // Децимация
         for (size_t iPart = 0; iPart < nParts; ++iPart)
-            DecimateSuperMeshlet(meshlets[iPart]);
+            DecimateSuperMeshlet(iLayer, partMeshlets[iPart]);
 
         // Каждая часть становится двумя новыми мешлетами
         MeshletLayerOffsets.push_back(MeshletTriangles.PartCount());
+        return true;
     }
 
-    void DecimateSuperMeshlet(Slice<size_t> baseMeshlets)
+    void DecimateSuperMeshlet(size_t iLayer, Slice<size_t> baseMeshlets)
     {
+        size_t layerBeg = MeshletLayerOffsets[iLayer];
+        size_t layerEnd = MeshletLayerOffsets[iLayer + 1];
+
 #if false
         for (size_t iMeshlet : baseMeshlets)
         {
@@ -707,15 +750,13 @@ struct IntermediateMesh
         std::unordered_set<MeshEdge, MeshEdgeHasher> dbgUsedEdges;
 
         // Помечаем вершины для сбора, собираем треугольники
-        for (size_t iMeshlet : baseMeshlets)
+        for (size_t iiMeshlet : baseMeshlets)
         {
-            for (IndexTriangle tri : MeshletTriangles[iMeshlet])
+            size_t iMeshlet = layerBeg + iiMeshlet;
+            for (IndexTriangle &tri : MeshletTriangles[iMeshlet])
             {
-                for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
-                {
-                    size_t iVert               = tri.idx[iTriVert];
+                for (size_t iVert : tri.idx)
                     Vertices[iVert].OtherIndex = UINT32_MAX;
-                }
                 locTriangles.push_back(tri);
             }
         }
@@ -758,6 +799,16 @@ struct IntermediateMesh
                 isVertexBorder[edge.second] = true;
                 dbgUsedEdges.insert(edge);
             }
+        }
+
+        // Проверим, что правильно определили граничные вершины
+        for (size_t iLocVert = 0; iLocVert < locVertices.size(); ++iLocVert)
+        {
+            size_t iVert = locVertices[iLocVert].OtherIndex;
+            // С плоской панелью некоторые вершины на границе мешлета
+            // не принадлежат другим мешлетам
+            if (!isVertexBorder[iLocVert])
+                ASSERT(dbgVertexMeshletCount[iVert] == 1);
         }
 
         // Неправильная децимация, просто схлопываем ребро к одной вершине
@@ -921,13 +972,10 @@ struct IntermediateMesh
         for (idx_t iMeshlet = 0; iMeshlet < nMeshlets; ++iMeshlet)
         {
             // Помечаем каждую вершину мешлета как ещё не использованную в этом мешлете
-            for (IndexTriangle tri : MeshletTriangles[iMeshlet])
+            for (IndexTriangle &tri : MeshletTriangles[iMeshlet])
             {
-                for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
-                {
-                    size_t iVert               = tri.idx[iTriVert];
+                for (size_t iVert : tri.idx)
                     Vertices[iVert].OtherIndex = UINT32_MAX;
-                }
             }
 
             MeshletDesc meshlet = {};
@@ -940,7 +988,7 @@ struct IntermediateMesh
 
             // Для отладки закодируем, какие вершины у мешлета --- граничные
             std::unordered_map<MeshEdge, size_t, MeshEdgeHasher> edgeTriangleCount;
-            for (IndexTriangle tri : MeshletTriangles[iMeshlet])
+            for (IndexTriangle &tri : MeshletTriangles[iMeshlet])
             {
                 for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
                 {
@@ -958,7 +1006,7 @@ struct IntermediateMesh
                     borderVertices.insert(nTris);
             }
 
-            for (IndexTriangle tri : MeshletTriangles[iMeshlet])
+            for (IndexTriangle &tri : MeshletTriangles[iMeshlet])
             {
                 uint encodedTriangle = 0;
                 for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
@@ -1028,16 +1076,11 @@ int main()
     mesh.DoFirstPartition();
     // std::cout << "Partitioning meshlets done\n";
 
-    for (size_t iLayer = 0;
-         /* При втором разделении возникают дырки */ iLayer < 2 && mesh.LayerMeshletCount(iLayer) > 2;
-         ++iLayer)
+    for (int i = 0; i < 2; ++i)
     {
-        // std::cout << "Building meshlet-edge index...\n";
-        mesh.BuildMeshletEdgeIndex(iLayer);
-        // std::cout << "Building meshlet-edge index done\n";
-
         // std::cout << "Partitioning meshlet graph...\n";
-        mesh.PartitionMeshlets(iLayer);
+        if (!mesh.PartitionMeshlets())
+            break;
         // std::cout << "Partitioning meshlet graph done\n";
     }
 
