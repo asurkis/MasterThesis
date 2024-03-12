@@ -1,8 +1,11 @@
 ﻿#include <Common.h>
 
 #include <algorithm>
+#include <array>
 #include <functional>
 #include <iostream>
+#include <map>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -34,9 +37,9 @@ static void AssertFn(bool cond, std::string_view text, int line)
 
 using MeshEdge = std::pair<size_t, size_t>;
 
-struct MeshEdgeHasher
+template <> struct std::hash<MeshEdge>
 {
-    uint64_t operator()(MeshEdge edge) const noexcept
+    size_t operator()(const MeshEdge &edge) const noexcept
     {
         return std::hash<uint64_t>{}((edge.first & UINT64_C(0xFFFFFFFF))
                                      | ((edge.second & UINT64_C(0xFFFFFFFF)) << 32));
@@ -54,7 +57,7 @@ struct IntermediateVertex
 
 struct IndexTriangle
 {
-    size_t idx[3] = {};
+    std::array<size_t, 3> idx = {};
 
     constexpr MeshEdge EdgeKey(size_t iEdge) const
     {
@@ -64,6 +67,16 @@ struct IndexTriangle
             std::swap(v, u);
         return {v, u};
     }
+
+    std::array<size_t, 3> SortedIndices() const noexcept
+    {
+        std::array<size_t, 3> res = idx;
+        std::sort(res.begin(), res.end());
+        return res;
+    }
+
+    bool operator==(const IndexTriangle &rhs) const noexcept { return SortedIndices() == rhs.SortedIndices(); }
+    bool operator<(const IndexTriangle &rhs) const noexcept { return SortedIndices() < rhs.SortedIndices(); }
 };
 
 // T должен быть тривиальным, напр. int
@@ -271,7 +284,7 @@ struct DisjointSetUnion
 
 struct IntermediateMesh
 {
-    template <size_t N> using EdgeIndicesMap = std::unordered_map<MeshEdge, TrivialVector<size_t, N>, MeshEdgeHasher>;
+    template <size_t N> using EdgeIndicesMap = std::unordered_map<MeshEdge, TrivialVector<size_t, N>>;
 
     std::vector<IntermediateVertex> Vertices;
     std::vector<IndexTriangle>      Triangles;
@@ -589,7 +602,7 @@ struct IntermediateMesh
         idx_t              nParts    = (nMeshlets + 3) / 4;
         std::vector<idx_t> meshletPart(nMeshlets, 0);
 
-        if (nParts < 2)
+        if (nParts < 3)
             return false;
 
         idx_t ncon = 1;
@@ -743,11 +756,11 @@ struct IntermediateMesh
 
         // TODO: Квадрики
         // TODO: Оптимизировать поиск граничных рёбер
-        std::vector<IntermediateVertex>                      locVertices;
-        std::vector<IndexTriangle>                           locTriangles;
-        std::unordered_map<MeshEdge, size_t, MeshEdgeHasher> edgeTriangleCount;
+        std::vector<IntermediateVertex>      locVertices;
+        std::vector<IndexTriangle>           locTriangles;
+        std::unordered_map<MeshEdge, size_t> edgeTriangleCount;
 
-        std::unordered_set<MeshEdge, MeshEdgeHasher> dbgUsedEdges;
+        std::unordered_set<MeshEdge> dbgUsedEdges;
 
         // Помечаем вершины для сбора, собираем треугольники
         for (size_t iiMeshlet : baseMeshlets)
@@ -856,7 +869,8 @@ struct IntermediateMesh
             }
         }
 
-        std::vector<IndexTriangle> resultTriangles;
+        // TODO: найти другой метод фильтрации дублирующихся треугольников
+        std::set<IndexTriangle> resultTrianglesSet;
 
         for (size_t iTriangle = 0; iTriangle < locTriangles.size(); ++iTriangle)
         {
@@ -886,7 +900,8 @@ struct IntermediateMesh
                 size_t iVert      = locVertices[iLocVert].OtherIndex;
                 tri.idx[iTriVert] = iVert;
             }
-            resultTriangles.push_back(tri);
+
+            resultTrianglesSet.insert(tri);
         }
 
         ASSERT(dbgUsedEdges.empty());
@@ -896,8 +911,8 @@ struct IntermediateMesh
         //           << " triangles out of " << locTriangles.size() << " left\n";
 
         // Разбиваем децимированный мешлет на два
-
-        EdgeIndicesMap<2> edgeTriangles = BuildTriangleEdgeIndex(resultTriangles);
+        std::vector<IndexTriangle> resultTriangles(resultTrianglesSet.begin(), resultTrianglesSet.end());
+        EdgeIndicesMap<2>          edgeTriangles = BuildTriangleEdgeIndex(resultTriangles);
 
         idx_t nvtxs = resultTriangles.size();
         idx_t ncon  = 1;
@@ -987,7 +1002,7 @@ struct IntermediateMesh
             meshlet.Parent2     = meshlet.Parent1 == 0 ? 0 : meshlet.Parent1 + 1;
 
             // Для отладки закодируем, какие вершины у мешлета --- граничные
-            std::unordered_map<MeshEdge, size_t, MeshEdgeHasher> edgeTriangleCount;
+            std::unordered_map<MeshEdge, size_t> edgeTriangleCount;
             for (IndexTriangle &tri : MeshletTriangles[iMeshlet])
             {
                 for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
@@ -1076,7 +1091,7 @@ int main()
     mesh.DoFirstPartition();
     // std::cout << "Partitioning meshlets done\n";
 
-    for (int i = 0; i < 2; ++i)
+    for (int i = 0; i < 6; ++i)
     {
         // std::cout << "Partitioning meshlet graph...\n";
         if (!mesh.PartitionMeshlets())
