@@ -48,16 +48,19 @@ template <> struct std::hash<MeshEdge>
 
 struct IntermediateVertex
 {
-    Vertex m;
+    Vertex m = {};
 
     // Используем вектор вместо словаря, т.к. ключи --- это индексы вершин
     // UINT32_MAX --- непосещённая вершина
     size_t OtherIndex = 0;
+    bool   Visited    = false;
+    bool   IsBorder   = false;
 };
 
 struct IndexTriangle
 {
-    std::array<size_t, 3> idx = {};
+    std::array<size_t, 3> idx       = {};
+    bool                  IsDeleted = false;
 
     constexpr MeshEdge EdgeKey(size_t iEdge) const
     {
@@ -329,17 +332,17 @@ struct IntermediateMesh
 
         int positionIdx = -1;
         int normalIdx   = -1;
-        for (auto &&pair : primitive.attributes)
+        for (const auto &[name, idx] : primitive.attributes)
         {
-            if (pair.first == "POSITION")
+            if (name == "POSITION")
             {
                 ASSERT(positionIdx == -1);
-                positionIdx = pair.second;
+                positionIdx = idx;
             }
-            else if (pair.first == "NORMAL")
+            else if (name == "NORMAL")
             {
                 ASSERT(normalIdx == -1);
-                normalIdx = pair.second;
+                normalIdx = idx;
             }
         }
         ASSERT(positionIdx != -1);
@@ -565,9 +568,9 @@ struct IntermediateMesh
 
         for (size_t iMeshlet = layerBeg; iMeshlet < layerEnd; ++iMeshlet)
         {
-            size_t                iiMeshlet = iMeshlet - layerBeg;
-            std::vector<MeshEdge> seenEdges;
-            for (IndexTriangle &tri : MeshletTriangles[iMeshlet])
+            size_t                       iiMeshlet = iMeshlet - layerBeg;
+            std::unordered_set<MeshEdge> seenEdges;
+            for (const IndexTriangle &tri : MeshletTriangles[iMeshlet])
             {
                 for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
                 {
@@ -576,13 +579,11 @@ struct IntermediateMesh
                     auto &vec            = iter->second;
                     if (!vec.LastEquals(iiMeshlet))
                         vec.Push(iiMeshlet);
-                    seenEdges.push_back(edge);
+                    seenEdges.insert(edge);
                 }
             }
 
-            std::sort(seenEdges.begin(), seenEdges.end());
-            seenEdges.erase(std::unique(seenEdges.begin(), seenEdges.end()), seenEdges.end());
-            for (MeshEdge &edge : seenEdges)
+            for (const MeshEdge &edge : seenEdges)
                 MeshletEdges.Push(edge);
             MeshletEdges.PushSplit();
         }
@@ -696,7 +697,7 @@ struct IntermediateMesh
             for (size_t iiMeshlet : partMeshlets[iPart])
             {
                 size_t iMeshlet = layerBeg + iiMeshlet;
-                for (IndexTriangle &tri : MeshletTriangles[iMeshlet])
+                for (const IndexTriangle &tri : MeshletTriangles[iMeshlet])
                 {
                     for (size_t iVert : tri.idx)
                         Vertices[iVert].OtherIndex = UINT32_MAX;
@@ -705,7 +706,7 @@ struct IntermediateMesh
             for (size_t iiMeshlet : partMeshlets[iPart])
             {
                 size_t iMeshlet = layerBeg + iiMeshlet;
-                for (IndexTriangle &tri : MeshletTriangles[iMeshlet])
+                for (const IndexTriangle &tri : MeshletTriangles[iMeshlet])
                 {
                     for (size_t iVert : tri.idx)
                     {
@@ -766,7 +767,7 @@ struct IntermediateMesh
         for (size_t iiMeshlet : baseMeshlets)
         {
             size_t iMeshlet = layerBeg + iiMeshlet;
-            for (IndexTriangle &tri : MeshletTriangles[iMeshlet])
+            for (const IndexTriangle &tri : MeshletTriangles[iMeshlet])
             {
                 for (size_t iVert : tri.idx)
                     Vertices[iVert].OtherIndex = UINT32_MAX;
@@ -801,15 +802,12 @@ struct IntermediateMesh
             }
         }
 
-        std::vector<bool> isTriangleDeleted(locTriangles.size(), false);
-        std::vector<bool> isVertexBorder(locVertices.size(), false);
-
-        for (auto &[edge, count] : edgeTriangleCount)
+        for (const auto &[edge, count] : edgeTriangleCount)
         {
             if (count == 1)
             {
-                isVertexBorder[edge.first]  = true;
-                isVertexBorder[edge.second] = true;
+                locVertices[edge.first].IsBorder = true;
+                locVertices[edge.second].IsBorder = true;
                 dbgUsedEdges.insert(edge);
             }
         }
@@ -820,7 +818,7 @@ struct IntermediateMesh
             size_t iVert = locVertices[iLocVert].OtherIndex;
             // С плоской панелью некоторые вершины на границе мешлета
             // не принадлежат другим мешлетам
-            if (!isVertexBorder[iLocVert])
+            if (!locVertices[iLocVert].IsBorder)
                 ASSERT(dbgVertexMeshletCount[iVert] == 1);
         }
 
@@ -831,18 +829,18 @@ struct IntermediateMesh
 
         for (size_t iTriangle = 0; iTriangle < locTriangles.size(); ++iTriangle)
         {
-            for (size_t iTriEdge = 0; !isTriangleDeleted[iTriangle] && iTriEdge < 3; ++iTriEdge)
+            for (size_t iTriEdge = 0; !locTriangles[iTriangle].IsDeleted && iTriEdge < 3; ++iTriEdge)
             {
                 size_t iVert = dsu.Get(locTriangles[iTriangle].idx[iTriEdge]);
                 size_t jVert = dsu.Get(locTriangles[iTriangle].idx[(iTriEdge + 1) % 3]);
                 if (iVert == jVert)
                 {
-                    isTriangleDeleted[iTriangle] = true;
+                    locTriangles[iTriangle].IsDeleted = true;
                     break;
                 }
-                if (isVertexBorder[iVert])
+                if (locVertices[iVert].IsBorder)
                 {
-                    if (isVertexBorder[jVert])
+                    if (locVertices[jVert].IsBorder)
                     {
                         // Ребро на границе, схлопывать нельзя
                         continue;
@@ -854,7 +852,7 @@ struct IntermediateMesh
                 }
                 else
                 {
-                    if (isVertexBorder[jVert])
+                    if (locVertices[jVert].IsBorder)
                     {
                         dsu.UniteLeft(jVert, iVert);
                     }
@@ -865,7 +863,7 @@ struct IntermediateMesh
                     }
                 }
                 ++nCollapsed;
-                isTriangleDeleted[iTriangle] = true;
+                locTriangles[iTriangle].IsDeleted = true;
             }
         }
 
@@ -882,10 +880,10 @@ struct IntermediateMesh
                 size_t iVert = tri.idx[iTriEdge];
                 size_t jVert = tri.idx[(iTriEdge + 1) % 3];
                 if (iVert == jVert)
-                    isTriangleDeleted[iTriangle] = true;
+                    locTriangles[iTriangle].IsDeleted = true;
             }
 
-            if (isTriangleDeleted[iTriangle])
+            if (locTriangles[iTriangle].IsDeleted)
                 continue;
 
             for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
@@ -987,7 +985,7 @@ struct IntermediateMesh
         for (idx_t iMeshlet = 0; iMeshlet < nMeshlets; ++iMeshlet)
         {
             // Помечаем каждую вершину мешлета как ещё не использованную в этом мешлете
-            for (IndexTriangle &tri : MeshletTriangles[iMeshlet])
+            for (const IndexTriangle &tri : MeshletTriangles[iMeshlet])
             {
                 for (size_t iVert : tri.idx)
                     Vertices[iVert].OtherIndex = UINT32_MAX;
@@ -1003,7 +1001,7 @@ struct IntermediateMesh
 
             // Для отладки закодируем, какие вершины у мешлета --- граничные
             std::unordered_map<MeshEdge, size_t> edgeTriangleCount;
-            for (IndexTriangle &tri : MeshletTriangles[iMeshlet])
+            for (const IndexTriangle &tri : MeshletTriangles[iMeshlet])
             {
                 for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
                 {
@@ -1013,7 +1011,7 @@ struct IntermediateMesh
                 }
             }
             std::unordered_set<size_t> borderVertices;
-            for (auto &[edge, nTris] : edgeTriangleCount)
+            for (const auto &[edge, nTris] : edgeTriangleCount)
             {
                 if (nTris >= 2)
                     continue;
@@ -1021,7 +1019,7 @@ struct IntermediateMesh
                     borderVertices.insert(nTris);
             }
 
-            for (IndexTriangle &tri : MeshletTriangles[iMeshlet])
+            for (const IndexTriangle &tri : MeshletTriangles[iMeshlet])
             {
                 uint encodedTriangle = 0;
                 for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
@@ -1074,7 +1072,7 @@ int main()
     {
         auto edgeTriangles = mesh.BuildTriangleEdgeIndex(mesh.Triangles);
         std::cout << "\nBy edge:\n";
-        for (auto &[edge, tris] : edgeTriangles)
+        for (const auto &[edge, tris] : edgeTriangles)
         {
             std::cout << "V[" << edge.first << ", " << edge.second << "]: T[";
             for (size_t i = 0; i < tris.Size; ++i)
@@ -1091,7 +1089,7 @@ int main()
     mesh.DoFirstPartition();
     // std::cout << "Partitioning meshlets done\n";
 
-    for (int i = 0; i < 6; ++i)
+    for (int i = 0; i < 4; ++i)
     {
         // std::cout << "Partitioning meshlet graph...\n";
         if (!mesh.PartitionMeshlets())
