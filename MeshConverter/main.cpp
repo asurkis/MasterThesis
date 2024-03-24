@@ -60,18 +60,19 @@ template <> struct std::hash<MeshEdge>
 
 struct IntermediateVertex
 {
-    Vertex m = {};
-
-    // Используем вектор вместо словаря, т.к. ключи --- это индексы вершин
-    size_t OtherIndex = 0;
-    bool   Visited    = false;
-    bool   IsBorder   = false;
+    Vertex   m             = {};
+    XMMATRIX Quadric       = XMMatrixIdentity();
+    size_t   OtherIndex    = 0;
+    size_t   TriangleCount = 0;
+    bool     Visited       = false;
+    bool     IsBorder      = false;
 };
 
-struct IndexTriangle
+struct IntermediateTriangle
 {
     std::array<size_t, 3> idx       = {};
-    std::array<double, 4> Error     = {};
+    std::array<float, 4>  Error     = {};
+    XMVECTOR              Normal    = XMVectorZero();
     bool                  IsDeleted = false;
     bool                  IsDirty   = false;
 
@@ -91,8 +92,8 @@ struct IndexTriangle
         return res;
     }
 
-    bool operator==(const IndexTriangle &rhs) const noexcept { return SortedIndices() == rhs.SortedIndices(); }
-    bool operator<(const IndexTriangle &rhs) const noexcept { return SortedIndices() < rhs.SortedIndices(); }
+    bool operator==(const IntermediateTriangle &rhs) const noexcept { return SortedIndices() == rhs.SortedIndices(); }
+    bool operator<(const IntermediateTriangle &rhs) const noexcept { return SortedIndices() < rhs.SortedIndices(); }
 };
 
 // T должен быть тривиальным, напр. int
@@ -189,24 +190,58 @@ template <typename T> struct SplitVector
     template <typename IntT>
     SplitVector(size_t nClusters, Slice<IntT> clusterization) : mVec(clusterization.Size()), mSplits(nClusters + 1, 0)
     {
+        FillStart(nClusters, clusterization.Size());
         for (IntT cluster : clusterization)
-            mSplits[cluster + 1]++;
-        for (size_t i = 2; i <= nClusters; ++i)
-            mSplits[i] += mSplits[i - 1];
+            FillReserve(cluster);
+        FillPreparePush();
         for (size_t i = 0; i < clusterization.Size(); ++i)
         {
             size_t iCluster = clusterization[i];
-            size_t pos      = mSplits[iCluster]++;
-            mVec[pos]       = i;
+            FillPush(iCluster, i);
+            ASSERT(mSplits[iCluster] <= mSplits[iCluster + 1]);
         }
+        FillCommit();
+    }
+
+    void FillStart(size_t nClusters, size_t nObjects)
+    {
+        mSplits.resize(nClusters + 1);
+        mVec.resize(nObjects);
+        std::fill(mSplits.begin(), mSplits.end(), 0);
+    }
+
+    void FillReserve(size_t iCluster, size_t by = 1) { mSplits[iCluster + 1]++; }
+
+    void FillPreparePush()
+    {
+        size_t nClusters = mSplits.size() - 1;
+        for (size_t i = 2; i <= nClusters; ++i)
+            mSplits[i] += mSplits[i - 1];
+        for (size_t i = 0; i < nClusters; ++i)
+            ASSERT(mSplits[i] <= mSplits[i + 1]);
+    }
+
+    void FillPush(size_t iCluster, const T &x)
+    {
+        size_t pos = mSplits[iCluster]++;
+        mVec[pos]  = x;
+    }
+
+    void FillPush(size_t iCluster, T &&x)
+    {
+        size_t pos = mSplits[iCluster]++;
+        mVec[pos]  = std::move(x);
+    }
+
+    void FillCommit()
+    {
+        size_t nClusters = mSplits.size() - 1;
         for (size_t i = nClusters; i > 0; --i)
             mSplits[i] = mSplits[i - 1];
         mSplits[0] = 0;
 
         for (size_t i = 0; i < nClusters; ++i)
-        {
             ASSERT(mSplits[i] <= mSplits[i + 1]);
-        }
     }
 
     size_t   PartSize(size_t iPart) const { return mSplits[iPart + 1] - mSplits[iPart]; }
@@ -300,14 +335,24 @@ struct DisjointSetUnion
 
 struct IntermediateMeshlet
 {
-    std::vector<IntermediateVertex> Vertices;
-    std::vector<IndexTriangle>      Triangles;
-    std::unordered_set<MeshEdge>    dbgUsedEdges;
+    std::vector<IntermediateVertex>        Vertices;
+    std::vector<IntermediateTriangle>      Triangles;
+    std::vector<size_t>                    VertexCluster;
+    SplitVector<std::pair<size_t, size_t>> ClusterTriangles;
+    std::unordered_set<MeshEdge>           dbgUsedEdges;
 
-    void Init(Slice<IntermediateVertex>   globalVertices,
-              SplitVector<IndexTriangle> &globalTriangles,
-              Slice<size_t>               baseMeshlets,
-              size_t                      layerBeg)
+    Slice<std::pair<size_t, size_t>> VertexTriangles(size_t iVert)
+    {
+        ASSERT(iVert < VertexCluster.size());
+        size_t iCluster = VertexCluster[iVert];
+        ASSERT(iCluster < ClusterTriangles.PartCount());
+        return ClusterTriangles[iCluster];
+    }
+
+    void Init(Slice<IntermediateVertex>          globalVertices,
+              SplitVector<IntermediateTriangle> &globalTriangles,
+              Slice<size_t>                      baseMeshlets,
+              size_t                             layerBeg)
     {
         Vertices.clear();
         Triangles.clear();
@@ -318,7 +363,7 @@ struct IntermediateMeshlet
         for (size_t iiMeshlet : baseMeshlets)
         {
             size_t iMeshlet = layerBeg + iiMeshlet;
-            for (const IndexTriangle &tri : globalTriangles[iMeshlet])
+            for (const IntermediateTriangle &tri : globalTriangles[iMeshlet])
             {
                 for (size_t iVert : tri.idx)
                     globalVertices[iVert].Visited = false;
@@ -327,7 +372,7 @@ struct IntermediateMeshlet
         }
 
         // Собираем вершины, а также преобразовываем индексы к локальным
-        for (IndexTriangle &tri : Triangles)
+        for (IntermediateTriangle &tri : Triangles)
         {
             tri.Error = {};
 
@@ -341,12 +386,14 @@ struct IntermediateMeshlet
                     iLocVert                = Vertices.size();
                     globVert.OtherIndex     = iLocVert;
                     IntermediateVertex vert = globVert;
+                    vert.TriangleCount      = 0;
                     vert.IsBorder           = false;
                     vert.OtherIndex         = iVert;
-                    vert.Visited            = false;
+                    vert.Visited            = true;
                     Vertices.push_back(vert);
                 }
                 iVert = iLocVert;
+                Vertices[iLocVert].TriangleCount++;
             }
 
             for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
@@ -366,81 +413,115 @@ struct IntermediateMeshlet
             Vertices[edge.second].IsBorder = true;
             dbgUsedEdges.insert(edge);
         }
+
+        BuildVertexTriangleIndex();
+    }
+
+    void BuildVertexTriangleIndex()
+    {
+        ClusterTriangles.Clear();
+        ClusterTriangles.FillStart(Vertices.size(), 3 * Triangles.size());
+        for (IntermediateTriangle &tri : Triangles)
+        {
+            for (size_t iVert : tri.idx)
+                ClusterTriangles.FillReserve(iVert);
+        }
+        ClusterTriangles.FillPreparePush();
+        for (size_t iTriangle = 0; iTriangle < Triangles.size(); ++iTriangle)
+        {
+            for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
+            {
+                size_t iVert = Triangles[iTriangle].idx[iTriVert];
+                ClusterTriangles.FillPush(iVert, {iTriangle, iTriVert});
+            }
+        }
+        ClusterTriangles.FillCommit();
+
+        VertexCluster.resize(Vertices.size());
+        for (size_t iVert = 0; iVert < Vertices.size(); ++iVert)
+            VertexCluster[iVert] = iVert;
     }
 
     void Decimate()
     {
         // Неправильная децимация, просто схлопываем ребро к одной вершине
         // Хотим проверить корректность топологии
-        DisjointSetUnion dsu(Vertices.size());
-        size_t           nDeletedTriangles = 0;
+        size_t nDeletedTriangles = 0;
 
-        // for (size_t iteration = 0; iteration < 100; ++iteration)
-        //{
-        //     if (locTriangles.size() - nDeletedTriangles <= 2 * MESHLET_MAX_PRIMITIVES)
-        //         break;
-        //     double threshold = 1e-9 * pow(iteration + 3.0, 5.0);
-        //     for (size_t iTriangle = 0; iTriangle < locTriangles.size(); ++iTriangle)
-        //     {
-        //         IndexTriangle &tri = locTriangles[iTriangle];
-        //         if (tri.IsDeleted || tri.IsDirty || tri.Error[3] > threshold)
-        //             continue;
-        //         for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
-        //         {
-        //             size_t iVert = tri.idx[iTriEdge];
-        //             size_t jVert = tri.idx[(iTriEdge + 1) % 3];
-        //             if (locVertices[iVert].IsBorder && locVertices[jVert].IsBorder)
-        //                 continue;
-        //         }
-        //     }
-        // }
-        for (size_t iTriangle = 0; iTriangle < Triangles.size(); ++iTriangle)
+        InitQuadrics();
+
+        for (size_t iteration = 0; iteration < 100; ++iteration)
         {
-            for (size_t iTriEdge = 0; !Triangles[iTriangle].IsDeleted && iTriEdge < 3; ++iTriEdge)
+            if (iteration % 5 == 0)
             {
-                size_t iVert = dsu.Get(Triangles[iTriangle].idx[iTriEdge]);
-                size_t jVert = dsu.Get(Triangles[iTriangle].idx[(iTriEdge + 1) % 3]);
-                if (iVert == jVert)
-                {
-                    Triangles[iTriangle].IsDeleted = true;
+                RemoveDeletedTriangles();
+                nDeletedTriangles = 0;
+            }
+            if (Triangles.size() - nDeletedTriangles <= 2 * MESHLET_MAX_PRIMITIVES)
+                break;
+            double threshold = 1e-9 * pow(iteration + 3.0, 5.0);
+            for (IntermediateTriangle &tri : Triangles)
+                tri.IsDirty = false;
+            for (size_t iTriangle = 0; iTriangle < Triangles.size(); ++iTriangle)
+            {
+                if (Triangles.size() - nDeletedTriangles <= 2 * MESHLET_MAX_PRIMITIVES)
                     break;
-                }
-                if (Vertices[iVert].IsBorder)
+                IntermediateTriangle &tri = Triangles[iTriangle];
+                if (tri.IsDeleted || tri.IsDirty || tri.Error[3] > threshold)
+                    continue;
+                for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
                 {
-                    if (Vertices[jVert].IsBorder)
+                    size_t              iVert = tri.idx[iTriEdge];
+                    size_t              jVert = tri.idx[(iTriEdge + 1) % 3];
+                    IntermediateVertex &vert1 = Vertices[iVert];
+                    IntermediateVertex &vert2 = Vertices[jVert];
+                    if (vert1.IsBorder && vert2.IsBorder)
+                        continue;
+
+                    XMVECTOR mid = {};
+                    CalculateError(iVert, jVert, mid);
+
+                    if (Flipped(mid, iVert, jVert, nDeletedTriangles))
+                        continue;
+                    if (Flipped(mid, jVert, iVert, nDeletedTriangles))
+                        continue;
+
+                    if (vert1.IsBorder)
                     {
-                        // Ребро на границе, схлопывать нельзя
+                        vert1.Quadric += vert2.Quadric;
+                        GatherTriangles(iVert, iVert);
+                        GatherTriangles(iVert, jVert);
+                        VertexCluster[iVert] = ClusterTriangles.PartCount();
+                        ClusterTriangles.PushSplit();
                         continue;
                     }
-                    else
+                    if (vert2.IsBorder)
                     {
-                        dsu.UniteLeft(iVert, jVert);
+                        vert2.Quadric += vert1.Quadric;
+                        GatherTriangles(jVert, iVert);
+                        GatherTriangles(jVert, jVert);
+                        VertexCluster[jVert] = ClusterTriangles.PartCount();
+                        ClusterTriangles.PushSplit();
+                        continue;
                     }
+                    XMStoreFloat3(&vert1.m.Position, mid);
+                    vert1.Quadric += vert2.Quadric;
+                    vert1.OtherIndex = UINT32_MAX;
+                    vert1.Visited    = false;
+                    GatherTriangles(iVert, iVert);
+                    GatherTriangles(iVert, jVert);
+                    VertexCluster[iVert] = ClusterTriangles.PartCount();
+                    ClusterTriangles.PushSplit();
                 }
-                else
-                {
-                    if (Vertices[jVert].IsBorder)
-                    {
-                        dsu.UniteLeft(jVert, iVert);
-                    }
-                    else
-                    {
-                        size_t kVert = dsu.Unite(iVert, jVert);
-                        ASSERT(kVert == iVert || kVert == jVert);
-                    }
-                }
-                Triangles[iTriangle].IsDeleted = true;
             }
         }
 
         // TODO: найти другой метод фильтрации дублирующихся треугольников
-        std::set<IndexTriangle> resultTrianglesSet;
+        std::set<IntermediateTriangle> resultTrianglesSet;
 
         for (size_t iTriangle = 0; iTriangle < Triangles.size(); ++iTriangle)
         {
-            IndexTriangle tri = Triangles[iTriangle];
-            for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
-                tri.idx[iTriVert] = dsu.Get(tri.idx[iTriVert]);
+            const IntermediateTriangle &tri = Triangles[iTriangle];
             for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
             {
                 size_t iVert = tri.idx[iTriEdge];
@@ -458,18 +539,178 @@ struct IntermediateMeshlet
                 dbgUsedEdges.erase(edge);
             }
 
-            for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
-            {
-                size_t iLocVert   = tri.idx[iTriVert];
-                size_t iVert      = Vertices[iLocVert].OtherIndex;
-                tri.idx[iTriVert] = iVert;
-            }
-
             resultTrianglesSet.insert(tri);
         }
 
         Triangles = std::vector(resultTrianglesSet.begin(), resultTrianglesSet.end());
-        ASSERT(dbgUsedEdges.empty());
+        //ASSERT(dbgUsedEdges.empty());
+    }
+
+    float CalculateError(size_t iVert, size_t jVert, XMVECTOR &out)
+    {
+        IntermediateVertex &vert1 = Vertices[iVert];
+        IntermediateVertex &vert2 = Vertices[jVert];
+        XMMATRIX            q     = vert1.Quadric + vert2.Quadric;
+        XMVECTOR            p1    = XMLoadFloat3(&vert1.m.Position);
+        XMVECTOR            p2    = XMLoadFloat3(&vert2.m.Position);
+
+        // Если мы на границе, то не имеем права двигать вершину
+        if (vert1.IsBorder)
+        {
+            out = XMLoadFloat3(&vert1.m.Position);
+            return VertexError(q, out);
+        }
+        if (vert2.IsBorder)
+        {
+            out = XMLoadFloat3(&vert2.m.Position);
+            return VertexError(q, out);
+        }
+
+        XMVECTOR det  = XMVectorZero();
+        XMMATRIX qInv = XMMatrixInverse(&det, q);
+        if (fabs(XMVectorGetX(det)) < 0.001)
+        {
+            XMVECTOR p3   = 0.5 * (p1 + p2);
+            float    err1 = VertexError(q, p1);
+            float    err2 = VertexError(q, p2);
+            float    err3 = VertexError(q, p3);
+            if (err1 <= err2 && err1 <= err3)
+            {
+                out = p1;
+                return err1;
+            }
+            if (err2 <= err1 && err2 <= err3)
+            {
+                out = p2;
+                return err2;
+            }
+            out = p3;
+            return err3;
+        }
+
+        out = XMVector4Transform(XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f), qInv);
+        return VertexError(q, out);
+    }
+
+    float VertexError(const XMMATRIX &q, XMVECTOR v)
+    {
+        v          = XMVectorSetW(v, 1.0f);
+        XMVECTOR u = XMVector3Transform(v, q);
+        return XMVectorGetX(XMVector4Dot(v, u));
+    }
+
+    void GatherTriangles(size_t iNewVert, size_t iVert)
+    {
+        XMVECTOR p           = {};
+        size_t   iCluster    = VertexCluster[iVert];
+        size_t   vertTrisBeg = ClusterTriangles.Split(iCluster);
+        size_t   vertTrisEnd = ClusterTriangles.Split(iCluster + 1);
+        // Нельзя использовать срез, т.к. меняем вектор
+        for (size_t iiTriangle = vertTrisBeg; iiTriangle < vertTrisEnd; ++iiTriangle)
+        {
+            const auto &[iTriangle, iTriVert] = ClusterTriangles.Flat(iiTriangle);
+            IntermediateTriangle &tri         = Triangles[iTriangle];
+            if (tri.IsDeleted)
+                continue;
+            tri.idx[iTriVert] = iNewVert;
+            tri.IsDirty       = true;
+            tri.Error[0]      = CalculateError(tri.idx[0], tri.idx[1], p);
+            tri.Error[1]      = CalculateError(tri.idx[1], tri.idx[2], p);
+            tri.Error[2]      = CalculateError(tri.idx[2], tri.idx[0], p);
+            tri.Error[0]      = XMMin(tri.Error[0], XMMin(tri.Error[1], tri.Error[2]));
+            ClusterTriangles.Push({iTriangle, iTriVert});
+        }
+    }
+
+    bool Flipped(XMVECTOR p, size_t iVert, size_t jVert, size_t &nDeletedTriangles)
+    {
+        size_t              nBorder = 0;
+        IntermediateVertex &vert1   = Vertices[iVert];
+        IntermediateVertex &vert2   = Vertices[jVert];
+        for (const auto &[iTriangle, iTriVert] : VertexTriangles(iVert))
+        {
+            IntermediateTriangle &tri = Triangles[iTriangle];
+            if (tri.IsDeleted)
+                continue;
+            size_t iVert1 = tri.idx[(iTriVert + 1) % 3];
+            size_t iVert2 = tri.idx[(iTriVert + 2) % 3];
+            if (iVert1 == jVert || iVert2 == jVert)
+            {
+                if (!tri.IsDeleted)
+                    nDeletedTriangles++;
+                tri.IsDeleted = true;
+                continue;
+            }
+
+            XMVECTOR p1 = XMVector3Normalize(XMLoadFloat3(&Vertices[iVert1].m.Position) - p);
+            XMVECTOR p2 = XMVector3Normalize(XMLoadFloat3(&Vertices[iVert2].m.Position) - p);
+            if (fabs(XMVectorGetX(XMVector3Dot(p1, p2))) > 0.999)
+                return true;
+
+            XMVECTOR n = XMVector3Normalize(XMVector3Cross(p1, p2));
+        }
+    }
+
+    void RemoveDeletedTriangles()
+    {
+        Triangles.erase(std::remove_if(Triangles.begin(),
+                                       Triangles.end(),
+                                       [](const IntermediateTriangle &tri) { return tri.IsDeleted; }),
+                        Triangles.end());
+        BuildVertexTriangleIndex();
+    }
+
+    void InitQuadrics()
+    {
+        for (IntermediateVertex &vert : Vertices)
+        {
+            vert.Quadric = XMMatrixSet(0.0f,
+                                       0.0f,
+                                       0.0f,
+                                       0.0f,
+                                       0.0f,
+                                       0.0f,
+                                       0.0f,
+                                       0.0f,
+                                       0.0f,
+                                       0.0f,
+                                       0.0f,
+                                       0.0f,
+                                       0.0f,
+                                       0.0f,
+                                       0.0f,
+                                       0.0f);
+        }
+        for (IntermediateTriangle &tri : Triangles)
+        {
+            XMVECTOR p[3] = {};
+            for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
+            {
+                size_t              iVert = tri.idx[iTriVert];
+                IntermediateVertex &vert  = Vertices[iVert];
+                p[iTriVert]               = XMLoadFloat3(&vert.m.Position);
+            }
+            tri.Normal    = XMVector3Normalize(XMVector3Cross(p[1] - p[0], p[2] - p[0]));
+            float    off  = -XMVectorGetX(XMVector3Dot(tri.Normal, p[0]));
+            XMVECTOR v    = XMVectorSetW(tri.Normal, off);
+            XMMATRIX prod = XMMatrixVectorTensorProduct(v, v);
+            for (size_t iVert : tri.idx)
+            {
+                IntermediateVertex &vert = Vertices[iVert];
+                vert.Quadric += prod;
+            }
+        }
+        for (IntermediateTriangle &tri : Triangles)
+        {
+            XMVECTOR p = {};
+            for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
+            {
+                size_t iVert        = tri.idx[iTriEdge];
+                size_t jVert        = tri.idx[(iTriEdge + 1) % 3];
+                tri.Error[iTriEdge] = CalculateError(iVert, jVert, p);
+            }
+            tri.Error[3] = XMMin(tri.Error[0], XMMin(tri.Error[1], tri.Error[2]));
+        }
     }
 };
 
@@ -477,15 +718,15 @@ struct IntermediateMesh
 {
     template <size_t N> using EdgeIndicesMap = std::unordered_map<MeshEdge, TrivialVector<size_t, N>>;
 
-    std::vector<IntermediateVertex> Vertices;
-    std::vector<IndexTriangle>      Triangles;
-    XMVECTOR                        BoxMax = XMVectorZero();
-    XMVECTOR                        BoxMin = XMVectorZero();
+    std::vector<IntermediateVertex>   Vertices;
+    std::vector<IntermediateTriangle> Triangles;
+    XMVECTOR                          BoxMax = XMVectorZero();
+    XMVECTOR                          BoxMin = XMVectorZero();
 
     std::vector<size_t> MeshletLayerOffsets;
 
-    SplitVector<IndexTriangle> MeshletTriangles;
-    std::vector<size_t>        MeshletParents1;
+    SplitVector<IntermediateTriangle> MeshletTriangles;
+    std::vector<size_t>               MeshletParents1;
 
     SplitVector<MeshEdge> MeshletEdges;
     EdgeIndicesMap<2>     EdgeMeshlets;
@@ -607,7 +848,7 @@ struct IntermediateMesh
         Triangles.reserve(nTriangles);
         for (size_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
         {
-            IndexTriangle tri;
+            IntermediateTriangle tri;
             for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
             {
                 size_t idxOffset = indexComponentSize * (3 * iTriangle + iTriVert);
@@ -621,7 +862,7 @@ struct IntermediateMesh
         }
     }
 
-    EdgeIndicesMap<2> BuildTriangleEdgeIndex(Slice<IndexTriangle> triangles)
+    EdgeIndicesMap<2> BuildTriangleEdgeIndex(Slice<IntermediateTriangle> triangles)
     {
         EdgeIndicesMap<2> edgeTriangles;
         for (size_t iTriangle = 0; iTriangle < triangles.Size(); ++iTriangle)
@@ -758,7 +999,7 @@ struct IntermediateMesh
         {
             size_t                       iiMeshlet = iMeshlet - layerBeg;
             std::unordered_set<MeshEdge> seenEdges;
-            for (const IndexTriangle &tri : MeshletTriangles[iMeshlet])
+            for (const IntermediateTriangle &tri : MeshletTriangles[iMeshlet])
             {
                 for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
                 {
@@ -885,7 +1126,7 @@ struct IntermediateMesh
             for (size_t iiMeshlet : partMeshlets[iPart])
             {
                 size_t iMeshlet = layerBeg + iiMeshlet;
-                for (const IndexTriangle &tri : MeshletTriangles[iMeshlet])
+                for (const IntermediateTriangle &tri : MeshletTriangles[iMeshlet])
                 {
                     for (size_t iVert : tri.idx)
                         Vertices[iVert].Visited = false;
@@ -894,7 +1135,7 @@ struct IntermediateMesh
             for (size_t iiMeshlet : partMeshlets[iPart])
             {
                 size_t iMeshlet = layerBeg + iiMeshlet;
-                for (const IndexTriangle &tri : MeshletTriangles[iMeshlet])
+                for (const IntermediateTriangle &tri : MeshletTriangles[iMeshlet])
                 {
                     for (size_t iVert : tri.idx)
                     {
@@ -992,6 +1233,22 @@ struct IntermediateMesh
                                               part.data());
         ASSERT_EQ(metisResult, METIS_OK);
 
+        for (IntermediateTriangle &tri : loc.Triangles)
+        {
+            for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
+            {
+                size_t              iVert = tri.idx[iTriVert];
+                IntermediateVertex &vert  = loc.Vertices[iVert];
+                if (!vert.Visited)
+                {
+                    vert.Visited    = true;
+                    vert.OtherIndex = Vertices.size();
+                    Vertices.push_back(vert);
+                }
+                tri.idx[iTriVert] = vert.OtherIndex;
+            }
+        }
+
         // Достаточно будет два раза пойти по вектору
         for (idx_t iPart = 0; iPart < 2; ++iPart)
         {
@@ -1016,7 +1273,7 @@ struct IntermediateMesh
         for (idx_t iMeshlet = 0; iMeshlet < nMeshlets; ++iMeshlet)
         {
             // Помечаем каждую вершину мешлета как ещё не использованную в этом мешлете
-            for (const IndexTriangle &tri : MeshletTriangles[iMeshlet])
+            for (const IntermediateTriangle &tri : MeshletTriangles[iMeshlet])
             {
                 for (size_t iVert : tri.idx)
                     Vertices[iVert].Visited = false;
@@ -1032,7 +1289,7 @@ struct IntermediateMesh
 
             // Для отладки закодируем, какие вершины у мешлета --- граничные
             std::unordered_map<MeshEdge, size_t> edgeTriangleCount;
-            for (const IndexTriangle &tri : MeshletTriangles[iMeshlet])
+            for (const IntermediateTriangle &tri : MeshletTriangles[iMeshlet])
             {
                 for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
                 {
@@ -1050,7 +1307,7 @@ struct IntermediateMesh
                     borderVertices.insert(nTris);
             }
 
-            for (const IndexTriangle &tri : MeshletTriangles[iMeshlet])
+            for (const IntermediateTriangle &tri : MeshletTriangles[iMeshlet])
             {
                 uint encodedTriangle = 0;
                 for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
