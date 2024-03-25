@@ -278,13 +278,24 @@ struct DisjointSetUnion
 
     std::vector<Node> Nodes;
 
-    DisjointSetUnion(size_t n) : Nodes(n)
+    void Init(size_t n)
     {
+        Nodes.resize(n);
         for (size_t i = 0; i < n; ++i)
         {
             Nodes[i].Parent = i;
             Nodes[i].Height = 0;
         }
+    }
+
+    size_t NewNode()
+    {
+        size_t i    = Nodes.size();
+        Node   node = {};
+        node.Height = 0;
+        node.Parent = i;
+        Nodes.push_back(node);
+        return i;
     }
 
     size_t Get(size_t i)
@@ -332,6 +343,8 @@ struct DisjointSetUnion
         Nodes[j].Parent = i;
     }
 };
+
+constexpr size_t TARGET_PRIMITIVES = MESHLET_MAX_PRIMITIVES * 3 / 4;
 
 struct IntermediateMeshlet
 {
@@ -444,8 +457,6 @@ struct IntermediateMeshlet
 
     void Decimate()
     {
-        // Неправильная децимация, просто схлопываем ребро к одной вершине
-        // Хотим проверить корректность топологии
         size_t nDeletedTriangles = 0;
 
         InitQuadrics();
@@ -457,16 +468,17 @@ struct IntermediateMeshlet
                 RemoveDeletedTriangles();
                 nDeletedTriangles = 0;
             }
-            if (Triangles.size() - nDeletedTriangles <= 2 * MESHLET_MAX_PRIMITIVES)
+            if (Triangles.size() - nDeletedTriangles <= 2 * TARGET_PRIMITIVES)
                 break;
             double threshold = 1e-9 * pow(iteration + 3.0, 5.0);
             for (IntermediateTriangle &tri : Triangles)
                 tri.IsDirty = false;
-            for (size_t iTriangle = 0; iTriangle < Triangles.size(); ++iTriangle)
+            size_t nTriangles = Triangles.size();
+            for (size_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
             {
-                if (Triangles.size() - nDeletedTriangles <= 2 * MESHLET_MAX_PRIMITIVES)
+                if (Triangles.size() - nDeletedTriangles <= 2 * TARGET_PRIMITIVES)
                     break;
-                IntermediateTriangle &tri = Triangles[iTriangle];
+                const IntermediateTriangle &tri = Triangles[iTriangle];
                 if (tri.IsDeleted || tri.IsDirty || tri.Error[3] > threshold)
                     continue;
                 for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
@@ -514,6 +526,7 @@ struct IntermediateMeshlet
                     ClusterTriangles.PushSplit();
                 }
             }
+            break;
         }
 
         // TODO: найти другой метод фильтрации дублирующихся треугольников
@@ -543,7 +556,7 @@ struct IntermediateMeshlet
         }
 
         Triangles = std::vector(resultTrianglesSet.begin(), resultTrianglesSet.end());
-        //ASSERT(dbgUsedEdges.empty());
+        // ASSERT(dbgUsedEdges.empty());
     }
 
     float CalculateError(size_t iVert, size_t jVert, XMVECTOR &out)
@@ -612,6 +625,7 @@ struct IntermediateMeshlet
             IntermediateTriangle &tri         = Triangles[iTriangle];
             if (tri.IsDeleted)
                 continue;
+            ASSERT_EQ(tri.idx[iTriVert], iVert);
             tri.idx[iTriVert] = iNewVert;
             tri.IsDirty       = true;
             tri.Error[0]      = CalculateError(tri.idx[0], tri.idx[1], p);
@@ -619,6 +633,13 @@ struct IntermediateMeshlet
             tri.Error[2]      = CalculateError(tri.idx[2], tri.idx[0], p);
             tri.Error[0]      = XMMin(tri.Error[0], XMMin(tri.Error[1], tri.Error[2]));
             ClusterTriangles.Push({iTriangle, iTriVert});
+        }
+        for (const IntermediateTriangle &tri : Triangles)
+        {
+            if (tri.IsDeleted)
+                continue;
+            for (size_t jVert : tri.idx)
+                ASSERT(jVert == iNewVert || jVert != iVert);
         }
     }
 
@@ -642,12 +663,12 @@ struct IntermediateMeshlet
                 continue;
             }
 
-            XMVECTOR p1 = XMVector3Normalize(XMLoadFloat3(&Vertices[iVert1].m.Position) - p);
-            XMVECTOR p2 = XMVector3Normalize(XMLoadFloat3(&Vertices[iVert2].m.Position) - p);
-            if (fabs(XMVectorGetX(XMVector3Dot(p1, p2))) > 0.999)
+            XMVECTOR nab = XMVector3Normalize(XMLoadFloat3(&Vertices[iVert1].m.Position) - p);
+            XMVECTOR nac = XMVector3Normalize(XMLoadFloat3(&Vertices[iVert2].m.Position) - p);
+            if (fabs(XMVectorGetX(XMVector3Dot(nab, nac))) > 0.999)
                 return true;
 
-            XMVECTOR n = XMVector3Normalize(XMVector3Cross(p1, p2));
+            tri.Normal = XMVector3Normalize(XMVector3Cross(nab, nac));
         }
     }
 
@@ -881,8 +902,7 @@ struct IntermediateMesh
 
     void DoFirstPartition()
     {
-        constexpr size_t TARGET_PRIMITIVES = MESHLET_MAX_PRIMITIVES * 3 / 4;
-        size_t           nMeshlets         = (Triangles.size() + TARGET_PRIMITIVES - 1) / TARGET_PRIMITIVES;
+        size_t nMeshlets = (Triangles.size() + TARGET_PRIMITIVES - 1) / TARGET_PRIMITIVES;
 
         MeshletLayerOffsets = {0, nMeshlets};
 
@@ -1378,7 +1398,7 @@ int main()
     mesh.DoFirstPartition();
     // std::cout << "Partitioning meshlets done\n";
 
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < 1; ++i)
     {
         // std::cout << "Partitioning meshlet graph...\n";
         if (!mesh.PartitionMeshlets())
