@@ -133,6 +133,11 @@ template <typename T, size_t CAPACITY> struct TrivialVector
     const T *end() const noexcept { return Data + Size; }
 };
 
+template <typename T> bool LastEquals(const std::vector<T> &vec, const T &x)
+{
+    return !vec.empty() && vec[vec.size() - 1] == x;
+}
+
 template <typename T> struct Slice
 {
     Slice(T *data, size_t size) : mData(data), mSize(size) {}
@@ -370,8 +375,6 @@ struct IntermediateMeshlet
         Vertices.clear();
         Triangles.clear();
 
-        std::unordered_map<MeshEdge, size_t> edgeTriangleCount;
-
         // Помечаем вершины для сбора, собираем треугольники
         for (size_t iiMeshlet : baseMeshlets)
         {
@@ -408,7 +411,16 @@ struct IntermediateMeshlet
                 iVert = iLocVert;
                 Vertices[iLocVert].TriangleCount++;
             }
+        }
+        MarkBorderVertices();
+        BuildVertexTriangleIndex();
+    }
 
+    void MarkBorderVertices()
+    {
+        std::unordered_map<MeshEdge, size_t> edgeTriangleCount;
+        for (const IntermediateTriangle &tri : Triangles)
+        {
             for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
             {
                 MeshEdge edge        = tri.EdgeKey(iTriEdge);
@@ -426,8 +438,6 @@ struct IntermediateMeshlet
             Vertices[edge.second].IsBorder = true;
             dbgUsedEdges.insert(edge);
         }
-
-        BuildVertexTriangleIndex();
     }
 
     void BuildVertexTriangleIndex()
@@ -457,10 +467,14 @@ struct IntermediateMeshlet
 
     void Decimate()
     {
-        size_t nDeletedTriangles = 0;
+        size_t            nDeletedTriangles = 0;
+        std::vector<bool> deleted1;
+        std::vector<bool> deleted2;
 
         InitQuadrics();
 
+        size_t nMerged = 0;
+        dbgSaveAsObj(nMerged);
         for (size_t iteration = 0; iteration < 100; ++iteration)
         {
             if (iteration % 5 == 0)
@@ -473,8 +487,7 @@ struct IntermediateMeshlet
             double threshold = 1e-9 * pow(iteration + 3.0, 5.0);
             for (IntermediateTriangle &tri : Triangles)
                 tri.IsDirty = false;
-            size_t nTriangles = Triangles.size();
-            for (size_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
+            for (size_t iTriangle = 0; iTriangle < Triangles.size(); ++iTriangle)
             {
                 if (Triangles.size() - nDeletedTriangles <= 2 * TARGET_PRIMITIVES)
                     break;
@@ -493,40 +506,47 @@ struct IntermediateMeshlet
                     XMVECTOR mid = {};
                     CalculateError(iVert, jVert, mid);
 
-                    if (Flipped(mid, iVert, jVert, nDeletedTriangles))
+                    deleted1.resize(VertexTriangles(iVert).Size());
+                    std::fill(deleted1.begin(), deleted1.end(), 0);
+                    if (Flipped(mid, iVert, jVert, deleted1))
                         continue;
-                    if (Flipped(mid, jVert, iVert, nDeletedTriangles))
+                    deleted2.resize(VertexTriangles(jVert).Size());
+                    std::fill(deleted2.begin(), deleted2.end(), 0);
+                    if (Flipped(mid, jVert, iVert, deleted2))
                         continue;
 
                     if (vert1.IsBorder)
                     {
                         vert1.Quadric += vert2.Quadric;
-                        GatherTriangles(iVert, iVert);
-                        GatherTriangles(iVert, jVert);
+                        GatherTriangles(iVert, iVert, nDeletedTriangles, deleted1);
+                        GatherTriangles(iVert, jVert, nDeletedTriangles, deleted2);
                         VertexCluster[iVert] = ClusterTriangles.PartCount();
                         ClusterTriangles.PushSplit();
-                        continue;
+                        dbgSaveAsObj(++nMerged);
+                        break;
                     }
                     if (vert2.IsBorder)
                     {
                         vert2.Quadric += vert1.Quadric;
-                        GatherTriangles(jVert, iVert);
-                        GatherTriangles(jVert, jVert);
+                        GatherTriangles(jVert, iVert, nDeletedTriangles, deleted1);
+                        GatherTriangles(jVert, jVert, nDeletedTriangles, deleted2);
                         VertexCluster[jVert] = ClusterTriangles.PartCount();
                         ClusterTriangles.PushSplit();
-                        continue;
+                        dbgSaveAsObj(++nMerged);
+                        break;
                     }
                     XMStoreFloat3(&vert1.m.Position, mid);
                     vert1.Quadric += vert2.Quadric;
                     vert1.OtherIndex = UINT32_MAX;
                     vert1.Visited    = false;
-                    GatherTriangles(iVert, iVert);
-                    GatherTriangles(iVert, jVert);
+                    GatherTriangles(iVert, iVert, nDeletedTriangles, deleted1);
+                    GatherTriangles(iVert, jVert, nDeletedTriangles, deleted2);
                     VertexCluster[iVert] = ClusterTriangles.PartCount();
                     ClusterTriangles.PushSplit();
+                    dbgSaveAsObj(++nMerged);
+                    break;
                 }
             }
-            break;
         }
 
         // TODO: найти другой метод фильтрации дублирующихся треугольников
@@ -581,28 +601,28 @@ struct IntermediateMeshlet
 
         XMVECTOR det  = XMVectorZero();
         XMMATRIX qInv = XMMatrixInverse(&det, q);
-        if (fabs(XMVectorGetX(det)) < 0.001)
+        if (fabs(XMVectorGetX(det)) >= 0.001)
         {
-            XMVECTOR p3   = 0.5 * (p1 + p2);
-            float    err1 = VertexError(q, p1);
-            float    err2 = VertexError(q, p2);
-            float    err3 = VertexError(q, p3);
-            if (err1 <= err2 && err1 <= err3)
-            {
-                out = p1;
-                return err1;
-            }
-            if (err2 <= err1 && err2 <= err3)
-            {
-                out = p2;
-                return err2;
-            }
-            out = p3;
-            return err3;
+            out = XMVector4Transform(XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f), qInv);
+            return VertexError(q, out);
         }
 
-        out = XMVector4Transform(XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f), qInv);
-        return VertexError(q, out);
+        XMVECTOR p3   = 0.5 * (p1 + p2);
+        float    err1 = VertexError(q, p1);
+        float    err2 = VertexError(q, p2);
+        float    err3 = VertexError(q, p3);
+        if (err1 <= err2 && err1 <= err3)
+        {
+            out = p1;
+            return err1;
+        }
+        if (err2 <= err1 && err2 <= err3)
+        {
+            out = p2;
+            return err2;
+        }
+        out = p3;
+        return err3;
     }
 
     float VertexError(const XMMATRIX &q, XMVECTOR v)
@@ -612,7 +632,7 @@ struct IntermediateMeshlet
         return XMVectorGetX(XMVector4Dot(v, u));
     }
 
-    void GatherTriangles(size_t iNewVert, size_t iVert)
+    void GatherTriangles(size_t iNewVert, size_t iVert, size_t &nDeletedTriangles, const std::vector<bool> &deleted)
     {
         XMVECTOR p           = {};
         size_t   iCluster    = VertexCluster[iVert];
@@ -625,6 +645,13 @@ struct IntermediateMeshlet
             IntermediateTriangle &tri         = Triangles[iTriangle];
             if (tri.IsDeleted)
                 continue;
+            if (deleted[iiTriangle - vertTrisBeg])
+            {
+                if (!tri.IsDeleted)
+                    nDeletedTriangles++;
+                tri.IsDeleted = true;
+                continue;
+            }
             ASSERT_EQ(tri.idx[iTriVert], iVert);
             tri.idx[iTriVert] = iNewVert;
             tri.IsDirty       = true;
@@ -643,33 +670,48 @@ struct IntermediateMeshlet
         }
     }
 
-    bool Flipped(XMVECTOR p, size_t iVert, size_t jVert, size_t &nDeletedTriangles)
+    bool Flipped(XMVECTOR p, size_t iVert, size_t jVert, std::vector<bool> &deleted)
     {
-        size_t              nBorder = 0;
-        IntermediateVertex &vert1   = Vertices[iVert];
-        IntermediateVertex &vert2   = Vertices[jVert];
-        for (const auto &[iTriangle, iTriVert] : VertexTriangles(iVert))
+        size_t                           nBorder = 0;
+        IntermediateVertex              &vert1   = Vertices[iVert];
+        IntermediateVertex              &vert2   = Vertices[jVert];
+        Slice<std::pair<size_t, size_t>> refs    = VertexTriangles(iVert);
+
+        XMVECTOR pa = XMLoadFloat3(&Vertices[iVert].m.Position);
+
+        for (size_t iiiTriangle = 0; iiiTriangle < refs.Size(); ++iiiTriangle)
         {
-            IntermediateTriangle &tri = Triangles[iTriangle];
+            const auto &[iTriangle, iTriVert] = refs[iiiTriangle];
+            IntermediateTriangle &tri         = Triangles[iTriangle];
             if (tri.IsDeleted)
                 continue;
             size_t iVert1 = tri.idx[(iTriVert + 1) % 3];
             size_t iVert2 = tri.idx[(iTriVert + 2) % 3];
             if (iVert1 == jVert || iVert2 == jVert)
             {
-                if (!tri.IsDeleted)
-                    nDeletedTriangles++;
-                tri.IsDeleted = true;
+                deleted[iiiTriangle] = true;
                 continue;
             }
 
-            XMVECTOR nab = XMVector3Normalize(XMLoadFloat3(&Vertices[iVert1].m.Position) - p);
-            XMVECTOR nac = XMVector3Normalize(XMLoadFloat3(&Vertices[iVert2].m.Position) - p);
-            if (fabs(XMVectorGetX(XMVector3Dot(nab, nac))) > 0.999)
+            XMVECTOR pb      = XMLoadFloat3(&Vertices[iVert1].m.Position);
+            XMVECTOR pc      = XMLoadFloat3(&Vertices[iVert2].m.Position);
+            XMVECTOR abOld   = pb - pa;
+            XMVECTOR acOld   = pc - pa;
+            XMVECTOR abNew   = pb - p;
+            XMVECTOR acNew   = pc - p;
+            XMVECTOR nabOld  = XMVector3Normalize(abOld);
+            XMVECTOR nacOld  = XMVector3Normalize(acOld);
+            XMVECTOR nabNew  = XMVector3Normalize(abNew);
+            XMVECTOR nacNew  = XMVector3Normalize(acNew);
+            XMVECTOR normOld = XMVector3Cross(abOld, acOld);
+            XMVECTOR normNew = XMVector3Cross(abNew, acNew);
+            if (XMVectorGetX(XMVector3Dot(normNew, normOld)) < 0.0)
                 return true;
-
-            tri.Normal = XMVector3Normalize(XMVector3Cross(nab, nac));
+            if (fabs(XMVectorGetX(XMVector3Dot(nabNew, nacNew))) > 0.999)
+                return true;
+            tri.Normal = normNew;
         }
+        return false;
     }
 
     void RemoveDeletedTriangles()
@@ -733,11 +775,39 @@ struct IntermediateMeshlet
             tri.Error[3] = XMMin(tri.Error[0], XMMin(tri.Error[1], tri.Error[2]));
         }
     }
+
+    void dbgSaveAsObj(size_t iteration)
+    {
+        if constexpr (false)
+        {
+            std::ostringstream ossFilename;
+            ossFilename << "dbg" << std::setfill('0') << std::setw(4) << iteration << ".obj";
+            std::ofstream fout(ossFilename.str());
+            for (IntermediateVertex &v : Vertices)
+                fout << "v " << v.m.Position.x << " " << v.m.Position.y << " " << v.m.Position.z << "\n";
+            for (IntermediateVertex &v : Vertices)
+            {
+                if (v.IsBorder)
+                    fout << "vt 1\n";
+                else
+                    fout << "vt 0\n";
+            }
+            for (IntermediateTriangle &tri : Triangles)
+            {
+                if (tri.IsDeleted)
+                    continue;
+                fout << "f";
+                for (size_t iVert : tri.idx)
+                    fout << " " << iVert + 1 << "/" << iVert + 1;
+                fout << "\n";
+            }
+        }
+    }
 };
 
 struct IntermediateMesh
 {
-    template <size_t N> using EdgeIndicesMap = std::unordered_map<MeshEdge, TrivialVector<size_t, N>>;
+    template <size_t N> using EdgeIndicesMap = std::unordered_map<MeshEdge, std::vector<size_t>>;
 
     std::vector<IntermediateVertex>   Vertices;
     std::vector<IntermediateTriangle> Triangles;
@@ -893,8 +963,8 @@ struct IntermediateMesh
                 MeshEdge edge        = triangles[iTriangle].EdgeKey(iTriEdge);
                 auto [iter, isFirst] = edgeTriangles.try_emplace(edge);
                 auto &vec            = iter->second;
-                ASSERT(!vec.LastEquals(iTriangle));
-                vec.Push(iTriangle);
+                ASSERT(!LastEquals(vec, iTriangle));
+                vec.push_back(iTriangle);
             }
         }
         return edgeTriangles;
@@ -1026,8 +1096,8 @@ struct IntermediateMesh
                     MeshEdge edge        = tri.EdgeKey(iTriEdge);
                     auto [iter, isFirst] = EdgeMeshlets.try_emplace(edge);
                     auto &vec            = iter->second;
-                    if (!vec.LastEquals(iiMeshlet))
-                        vec.Push(iiMeshlet);
+                    if (!LastEquals(vec, iiMeshlet))
+                        vec.push_back(iiMeshlet);
                     seenEdges.insert(edge);
                 }
             }
@@ -1366,6 +1436,7 @@ struct IntermediateMesh
     }
 };
 
+#if true
 int main()
 {
     IntermediateMesh mesh;
@@ -1384,11 +1455,11 @@ int main()
         for (const auto &[edge, tris] : edgeTriangles)
         {
             std::cout << "V[" << edge.first << ", " << edge.second << "]: T[";
-            for (size_t i = 0; i < tris.Size; ++i)
+            for (size_t i = 0; i < tris.size(); ++i)
             {
                 if (i != 0)
                     std::cout << ", ";
-                std::cout << tris.Data[i];
+                std::cout << tris[i];
             }
             std::cout << "]\n";
         }
@@ -1398,7 +1469,7 @@ int main()
     mesh.DoFirstPartition();
     // std::cout << "Partitioning meshlets done\n";
 
-    for (int i = 0; i < 1; ++i)
+    for (int i = 0;; ++i)
     {
         // std::cout << "Partitioning meshlet graph...\n";
         if (!mesh.PartitionMeshlets())
@@ -1492,3 +1563,42 @@ int main()
 
     return 0;
 }
+#else
+int main()
+{
+    IntermediateMeshlet meshlet;
+    meshlet.Vertices.reserve(16);
+    meshlet.Triangles.reserve(18);
+    for (int y = 0; y < 4; ++y)
+    {
+        for (int x = 0; x < 4; ++x)
+        {
+            IntermediateVertex v = {};
+            v.m.Position.x       = 2.0f / 3.0f * x - 1.0f;
+            v.m.Position.y       = 2.0f / 3.0f * y - 1.0f;
+            meshlet.Vertices.push_back(v);
+        }
+    }
+    for (int y = 0; y < 3; ++y)
+    {
+        for (int x = 0; x < 3; ++x)
+        {
+            IntermediateTriangle tri = {};
+
+            tri.idx[0] = 4 * y + x;
+            tri.idx[1] = 4 * y + x + 1;
+            tri.idx[2] = 4 * y + x + 4;
+            meshlet.Triangles.push_back(tri);
+
+            tri.idx[0] = 4 * y + x + 5;
+            tri.idx[1] = 4 * y + x + 4;
+            tri.idx[2] = 4 * y + x + 1;
+            meshlet.Triangles.push_back(tri);
+        }
+    }
+    meshlet.MarkBorderVertices();
+    meshlet.BuildVertexTriangleIndex();
+    meshlet.Decimate();
+    return 0;
+}
+#endif
