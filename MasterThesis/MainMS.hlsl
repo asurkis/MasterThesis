@@ -21,7 +21,7 @@ uint GetVertexIndex(TMeshlet m, uint localIndex)
 
 TVertexOut GetVertexAttributes(uint iMeshlet, TMeshlet meshlet, uint iLocVert)
 {
-    uint iParent = meshlet.Parent1;
+    uint iParent = meshlet.ParentOffset;
     uint iVert = GetVertexIndex(meshlet, iLocVert);
     bool isBorder = (iVert & 0x80000000) != 0;
     iVert &= 0x7FFFFFFF;
@@ -70,7 +70,6 @@ void main(
 {
     uint iMeshlet = Payload.MeshletIndex[gid];
     TMeshlet m = Meshlets[iMeshlet];
-    uint iParent = m.Parent1;
     SetMeshOutputCounts(m.VertCount, m.PrimCount);
 
     if (gtid < m.PrimCount)

@@ -16,8 +16,8 @@ struct MeshletDesc
     uint VertOffset;
     uint PrimCount;
     uint PrimOffset;
-    uint Parent1;
-    uint Parent2;
+    uint ParentCount;
+    uint ParentOffset;
     uint Height;
     uint _padding;
 };

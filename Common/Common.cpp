@@ -75,8 +75,9 @@ void ModelCPU::LoadFromFile(const std::filesystem::path &path)
         const MeshletDesc &meshlet = Meshlets[iMeshlet];
         const BoundingBox &aabb    = MeshletBoxes[iMeshlet];
         // Восстанавливаем AABB родителей
-        for (uint iParent : {meshlet.Parent1, meshlet.Parent2})
+        for (uint iiParent = 0; iiParent < meshlet.ParentCount; ++iiParent)
         {
+            uint iParent = meshlet.ParentOffset + iiParent;
             if (iParent != 0)
             {
                 if (iParent <= iMeshlet || iParent >= Meshlets.size())
@@ -89,6 +90,7 @@ void ModelCPU::LoadFromFile(const std::filesystem::path &path)
                 aabbParent.Max.x = XMMax(aabbParent.Max.x, aabb.Max.x);
                 aabbParent.Max.y = XMMax(aabbParent.Max.y, aabb.Max.y);
                 aabbParent.Max.z = XMMax(aabbParent.Max.z, aabb.Max.z);
+
                 Meshlets[iParent].Height = std::max(Meshlets[iParent].Height, meshlet.Height + 1);
             }
         }

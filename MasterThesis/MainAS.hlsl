@@ -54,10 +54,11 @@ bool ShouldDisplay(uint iMeshlet)
     {
         return meshlet.Height == MeshInfo.DisplayType / 3;
     }
-    uint iParent = meshlet.Parent1;
-    bool isRoot = iParent == 0;
     
+    uint iParent = meshlet.ParentOffset;
+    bool isRoot = meshlet.ParentCount == 0;
     bool isLeaf = meshlet.Height == 0;
+    
     if (!isRoot)
     {
         TBoundingBox parentBox = MeshletBoxes[iParent];
