@@ -584,7 +584,7 @@ struct IntermediateMeshlet
         }
 
         Triangles = std::vector(resultTrianglesSet.begin(), resultTrianglesSet.end());
-        // ASSERT(dbgUsedEdges.empty());
+        ASSERT(dbgUsedEdges.empty());
     }
 
     float CalculateError(size_t iVert, size_t jVert, XMVECTOR &out)
@@ -1449,7 +1449,7 @@ int main()
     IntermediateMesh mesh;
 
     std::cout << "Loading model...\n";
-    mesh.LoadGLB("plane.glb");
+    mesh.LoadGLB("input.glb");
     std::cout << "Loading model done\n";
 
     size_t nVertices  = mesh.Vertices.size();
