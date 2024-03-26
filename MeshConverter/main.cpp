@@ -74,7 +74,6 @@ struct IntermediateTriangle
     std::array<float, 4>  Error     = {};
     XMVECTOR              Normal    = XMVectorZero();
     bool                  IsDeleted = false;
-    bool                  IsDirty   = false;
 
     constexpr MeshEdge EdgeKey(size_t iEdge) const
     {
@@ -470,29 +469,24 @@ struct IntermediateMeshlet
         size_t            nDeletedTriangles = 0;
         std::vector<bool> deleted1;
         std::vector<bool> deleted2;
+        std::vector<bool> deleted1Best;
+        std::vector<bool> deleted2Best;
 
         InitQuadrics();
 
         size_t nMerged = 0;
         dbgSaveAsObj(nMerged);
-        for (size_t iteration = 0; iteration < 100; ++iteration)
+        while (Triangles.size() - nDeletedTriangles > 2 * TARGET_PRIMITIVES)
         {
-            if (iteration % 5 == 0)
+            size_t   iVertBest = 0;
+            size_t   jVertBest = 0;
+            XMVECTOR midBest   = {};
+            float    errBest   = 0.0f;
+            bool     foundBest = false;
+
+            for (const IntermediateTriangle &tri : Triangles)
             {
-                RemoveDeletedTriangles();
-                nDeletedTriangles = 0;
-            }
-            if (Triangles.size() - nDeletedTriangles <= 2 * TARGET_PRIMITIVES)
-                break;
-            double threshold = 1e-9 * pow(iteration + 3.0, 5.0);
-            for (IntermediateTriangle &tri : Triangles)
-                tri.IsDirty = false;
-            for (size_t iTriangle = 0; iTriangle < Triangles.size(); ++iTriangle)
-            {
-                if (Triangles.size() - nDeletedTriangles <= 2 * TARGET_PRIMITIVES)
-                    break;
-                const IntermediateTriangle &tri = Triangles[iTriangle];
-                if (tri.IsDeleted || tri.IsDirty || tri.Error[3] > threshold)
+                if (tri.IsDeleted)
                     continue;
                 for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
                 {
@@ -504,49 +498,63 @@ struct IntermediateMeshlet
                         continue;
 
                     XMVECTOR mid = {};
-                    CalculateError(iVert, jVert, mid);
-
+                    float    err = CalculateError(iVert, jVert, mid);
                     deleted1.resize(VertexTriangles(iVert).Size());
-                    std::fill(deleted1.begin(), deleted1.end(), 0);
+                    std::fill(deleted1.begin(), deleted1.end(), false);
                     if (Flipped(mid, iVert, jVert, deleted1))
                         continue;
                     deleted2.resize(VertexTriangles(jVert).Size());
-                    std::fill(deleted2.begin(), deleted2.end(), 0);
+                    std::fill(deleted2.begin(), deleted2.end(), false);
                     if (Flipped(mid, jVert, iVert, deleted2))
                         continue;
 
-                    if (vert1.IsBorder)
-                    {
-                        vert1.Quadric += vert2.Quadric;
-                        GatherTriangles(iVert, iVert, nDeletedTriangles, deleted1);
-                        GatherTriangles(iVert, jVert, nDeletedTriangles, deleted2);
-                        VertexCluster[iVert] = ClusterTriangles.PartCount();
-                        ClusterTriangles.PushSplit();
-                        dbgSaveAsObj(++nMerged);
-                        break;
-                    }
-                    if (vert2.IsBorder)
-                    {
-                        vert2.Quadric += vert1.Quadric;
-                        GatherTriangles(jVert, iVert, nDeletedTriangles, deleted1);
-                        GatherTriangles(jVert, jVert, nDeletedTriangles, deleted2);
-                        VertexCluster[jVert] = ClusterTriangles.PartCount();
-                        ClusterTriangles.PushSplit();
-                        dbgSaveAsObj(++nMerged);
-                        break;
-                    }
-                    XMStoreFloat3(&vert1.m.Position, mid);
-                    vert1.Quadric += vert2.Quadric;
-                    vert1.OtherIndex = UINT32_MAX;
-                    vert1.Visited    = false;
-                    GatherTriangles(iVert, iVert, nDeletedTriangles, deleted1);
-                    GatherTriangles(iVert, jVert, nDeletedTriangles, deleted2);
-                    VertexCluster[iVert] = ClusterTriangles.PartCount();
-                    ClusterTriangles.PushSplit();
-                    dbgSaveAsObj(++nMerged);
-                    break;
+                    if (foundBest && err >= errBest)
+                        continue;
+
+                    deleted1Best.swap(deleted1);
+                    deleted2Best.swap(deleted2);
+                    iVertBest = iVert;
+                    jVertBest = jVert;
+                    midBest   = mid;
+                    errBest   = err;
+                    foundBest = true;
                 }
             }
+
+            if (!foundBest)
+                break;
+
+            IntermediateVertex &vert1 = Vertices[iVertBest];
+            IntermediateVertex &vert2 = Vertices[jVertBest];
+            if (vert1.IsBorder)
+            {
+                vert1.Quadric += vert2.Quadric;
+                GatherTriangles(iVertBest, iVertBest, nDeletedTriangles, deleted1Best);
+                GatherTriangles(iVertBest, jVertBest, nDeletedTriangles, deleted2Best);
+                VertexCluster[iVertBest] = ClusterTriangles.PartCount();
+                ClusterTriangles.PushSplit();
+                dbgSaveAsObj(++nMerged);
+                continue;
+            }
+            if (vert2.IsBorder)
+            {
+                vert2.Quadric += vert1.Quadric;
+                GatherTriangles(jVertBest, iVertBest, nDeletedTriangles, deleted1Best);
+                GatherTriangles(jVertBest, jVertBest, nDeletedTriangles, deleted2Best);
+                VertexCluster[jVertBest] = ClusterTriangles.PartCount();
+                ClusterTriangles.PushSplit();
+                dbgSaveAsObj(++nMerged);
+                continue;
+            }
+            XMStoreFloat3(&vert1.m.Position, midBest);
+            vert1.Quadric += vert2.Quadric;
+            vert1.OtherIndex = UINT32_MAX;
+            vert1.Visited    = false;
+            GatherTriangles(iVertBest, iVertBest, nDeletedTriangles, deleted1Best);
+            GatherTriangles(iVertBest, jVertBest, nDeletedTriangles, deleted2Best);
+            VertexCluster[iVertBest] = ClusterTriangles.PartCount();
+            ClusterTriangles.PushSplit();
+            dbgSaveAsObj(++nMerged);
         }
 
         // TODO: найти другой метод фильтрации дублирующихся треугольников
@@ -654,7 +662,6 @@ struct IntermediateMeshlet
             }
             ASSERT_EQ(tri.idx[iTriVert], iVert);
             tri.idx[iTriVert] = iNewVert;
-            tri.IsDirty       = true;
             tri.Error[0]      = CalculateError(tri.idx[0], tri.idx[1], p);
             tri.Error[1]      = CalculateError(tri.idx[1], tri.idx[2], p);
             tri.Error[2]      = CalculateError(tri.idx[2], tri.idx[0], p);
