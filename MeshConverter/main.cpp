@@ -347,9 +347,9 @@ struct IntermediateMeshlet
             IntermediateVertex &vert = Vertices[iVert];
             if (vert.IsBorder || vert.TriangleCount == 0)
                 continue;
-            vert.m.Normal.x /= vert.TriangleCount;
-            vert.m.Normal.y /= vert.TriangleCount;
-            vert.m.Normal.z /= vert.TriangleCount;
+            XMVECTOR norm = XMLoadFloat3(&vert.m.Normal);
+            norm          = XMVector3Normalize(norm);
+            XMStoreFloat3(&vert.m.Normal, norm);
         }
     }
 
