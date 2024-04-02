@@ -206,6 +206,7 @@ struct IntermediateMeshlet
             if (4 * nDeletedTriangles >= Triangles.size())
             {
                 RemoveDeletedTriangles();
+                InitQuadrics();
                 nDeletedTriangles = 0;
             }
 
@@ -389,16 +390,16 @@ struct IntermediateMeshlet
         float    err1 = VertexError(q, p1);
         float    err2 = VertexError(q, p2);
         float    err3 = VertexError(q, p3);
-        if (err1 <= err2 && err1 <= err3)
-        {
-            out = p1;
-            return err1;
-        }
-        if (err2 <= err1 && err2 <= err3)
-        {
-            out = p2;
-            return err2;
-        }
+        // if (err1 <= err2 && err1 <= err3)
+        //{
+        //     out = p1;
+        //     return err1;
+        // }
+        // if (err2 <= err1 && err2 <= err3)
+        //{
+        //     out = p2;
+        //     return err2;
+        // }
         out = p3;
         return err3;
     }
@@ -1167,38 +1168,38 @@ struct IntermediateMesh
 
         loc.Decimate();
 
-        // Разбиваем децимированный мешлет на два
-        EdgeIndicesMap<2> edgeTriangles = BuildTriangleEdgeIndex(loc.Triangles);
-
-        idx_t nvtxs = loc.Triangles.size();
-        idx_t ncon  = 1;
-
-        std::vector<idx_t> xadj;
-        xadj.reserve(nvtxs + 1);
-        xadj.push_back(0);
-
-        std::vector<idx_t> adjncy;
-        for (size_t iTriangle = 0; iTriangle < loc.Triangles.size(); ++iTriangle)
-        {
-            for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
-            {
-                MeshEdge edge = loc.Triangles[iTriangle].EdgeKey(iTriEdge);
-                auto    &vec  = edgeTriangles[edge];
-                for (size_t jTriangle : vec)
-                {
-                    if (jTriangle == iTriangle)
-                        continue;
-                    adjncy.push_back(jTriangle);
-                }
-            }
-            xadj.push_back(adjncy.size());
-        }
-
-        idx_t nparts = (loc.Triangles.size() + TARGET_PRIMITIVES - 1) / TARGET_PRIMITIVES;
+        idx_t nvtxs  = loc.Triangles.size();
+        idx_t ncon   = 1;
+        idx_t nparts = (nvtxs + TARGET_PRIMITIVES - 1) / TARGET_PRIMITIVES;
 
         std::vector<idx_t> part(nvtxs, 0);
+
         if (nparts > 1)
         {
+            // Разбиваем децимированный мешлет
+            EdgeIndicesMap<2> edgeTriangles = BuildTriangleEdgeIndex(loc.Triangles);
+
+            std::vector<idx_t> xadj;
+            xadj.reserve(nvtxs + 1);
+            xadj.push_back(0);
+
+            std::vector<idx_t> adjncy;
+            for (size_t iTriangle = 0; iTriangle < loc.Triangles.size(); ++iTriangle)
+            {
+                for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
+                {
+                    MeshEdge edge = loc.Triangles[iTriangle].EdgeKey(iTriEdge);
+                    auto    &vec  = edgeTriangles[edge];
+                    for (size_t jTriangle : vec)
+                    {
+                        if (jTriangle == iTriangle)
+                            continue;
+                        adjncy.push_back(jTriangle);
+                    }
+                }
+                xadj.push_back(adjncy.size());
+            }
+
             idx_t options[METIS_NOPTIONS] = {};
             METIS_SetDefaultOptions(options);
             options[METIS_OPTION_NUMBERING] = 0;
@@ -1249,6 +1250,8 @@ struct IntermediateMesh
         SplitVector<size_t> triangleIdx(nparts, Slice(part));
         for (size_t iPart = 0; iPart < triangleIdx.PartCount(); ++iPart)
         {
+            // if (triangleIdx[iPart].Size() > MESHLET_MAX_PRIMITIVES)
+            //     std::cerr << "Decimation fail: size = " << triangleIdx[iPart].Size() << "\n";
             for (size_t iTriangle : triangleIdx[iPart])
                 MeshletTriangles.Push(loc.Triangles[iTriangle]);
             MeshletTriangles.PushSplit();
@@ -1367,6 +1370,7 @@ int main()
 {
     IntermediateMesh mesh;
 
+#if false
     // Для отладки самой децимации пока будем выводить результат децимации сферы
     mesh.MakeSphere(32, 32);
     mesh.DoFirstPartition();
@@ -1380,12 +1384,13 @@ int main()
     std::cout << "Triangles left: " << meshlet.Triangles.size() << std::endl;
     meshlet.dbgSaveAsObj(9999, true);
     return 0;
+#endif
 
     std::cout << "Loading model...\n";
     // mesh.LoadGLB("plane1.glb");
     // mesh.LoadGLB("input.glb");
     // mesh.MakePlane(64);
-    mesh.MakeSphere(128, 128);
+    mesh.MakeSphere(64, 64);
     std::cout << "Loading model done\n";
 
     size_t nVertices  = mesh.Vertices.size();
