@@ -203,6 +203,12 @@ struct IntermediateMeshlet
         dbgSaveAsObj(nMerged);
         while (Triangles.size() - nDeletedTriangles > 2 * TARGET_PRIMITIVES)
         {
+            if (4 * nDeletedTriangles >= Triangles.size())
+            {
+                RemoveDeletedTriangles();
+                nDeletedTriangles = 0;
+            }
+
             size_t   iVertBest = 0;
             size_t   jVertBest = 0;
             XMVECTOR midBest   = {};
@@ -324,8 +330,7 @@ struct IntermediateMeshlet
                 IntermediateVertex &vert = Vertices[iVert];
                 if (vert.IsBorder)
                     continue;
-                vert.m.Normal      = float3(0.0f, 0.0f, 0.0f);
-                vert.TriangleCount = 0;
+                vert.m.Normal = float3(0.0f, 0.0f, 0.0f);
             }
         }
         for (IntermediateTriangle &tri : Triangles)
@@ -339,13 +344,12 @@ struct IntermediateMeshlet
                 IntermediateVertex &vert = Vertices[tri.idx[iTriVert]];
                 XMVECTOR            acc  = XMLoadFloat3(&vert.m.Normal);
                 XMStoreFloat3(&vert.m.Normal, acc + norm);
-                vert.TriangleCount++;
             }
         }
         for (size_t iVert = 0; iVert < Vertices.size(); ++iVert)
         {
             IntermediateVertex &vert = Vertices[iVert];
-            if (vert.IsBorder || vert.TriangleCount == 0)
+            if (vert.IsBorder)
                 continue;
             XMVECTOR norm = XMLoadFloat3(&vert.m.Normal);
             norm          = XMVector3Normalize(norm);
@@ -549,31 +553,30 @@ struct IntermediateMeshlet
         }
     }
 
-    void dbgSaveAsObj(size_t iteration)
+    void dbgSaveAsObj(size_t iteration, bool overrideDebug = true)
     {
-        if constexpr (false)
+        if (!overrideDebug)
+            return;
+        std::ostringstream ossFilename;
+        ossFilename << "dbg/dbg" << std::setfill('0') << std::setw(4) << iteration << ".obj";
+        std::ofstream fout(ossFilename.str());
+        for (IntermediateVertex &v : Vertices)
+            fout << "v " << v.m.Position.x << " " << v.m.Position.y << " " << v.m.Position.z << "\n";
+        for (IntermediateVertex &v : Vertices)
         {
-            std::ostringstream ossFilename;
-            ossFilename << "dbg" << std::setfill('0') << std::setw(4) << iteration << ".obj";
-            std::ofstream fout(ossFilename.str());
-            for (IntermediateVertex &v : Vertices)
-                fout << "v " << v.m.Position.x << " " << v.m.Position.y << " " << v.m.Position.z << "\n";
-            for (IntermediateVertex &v : Vertices)
-            {
-                if (v.IsBorder)
-                    fout << "vt 1\n";
-                else
-                    fout << "vt 0\n";
-            }
-            for (IntermediateTriangle &tri : Triangles)
-            {
-                if (tri.IsDeleted)
-                    continue;
-                fout << "f";
-                for (size_t iVert : tri.idx)
-                    fout << " " << iVert + 1 << "/" << iVert + 1;
-                fout << "\n";
-            }
+            if (v.IsBorder)
+                fout << "vt 1\n";
+            else
+                fout << "vt 0\n";
+        }
+        for (IntermediateTriangle &tri : Triangles)
+        {
+            if (tri.IsDeleted)
+                continue;
+            fout << "f";
+            for (size_t iVert : tri.idx)
+                fout << " " << iVert + 1 << "/" << iVert + 1;
+            fout << "\n";
         }
     }
 };
@@ -717,14 +720,15 @@ struct IntermediateMesh
         InitBBox();
     }
 
-    void MakePlane(int n)
+    void MakePlane(size_t n)
     {
         Vertices.clear();
         Triangles.clear();
         Vertices.reserve(n * n);
-        for (int z = 0; z < n; ++z)
+        Triangles.reserve((n - 1) * (n - 1));
+        for (size_t z = 0; z < n; ++z)
         {
-            for (int x = 0; x < n; ++x)
+            for (size_t x = 0; x < n; ++x)
             {
                 IntermediateVertex vert = {};
                 vert.m.Position.x       = 2.0f * x / (n - 1) - 1.0f;
@@ -736,9 +740,9 @@ struct IntermediateMesh
                 Vertices.push_back(vert);
             }
         }
-        for (int z = 0; z + 1 < n; ++z)
+        for (size_t z = 0; z + 1 < n; ++z)
         {
-            for (int x = 0; x + 1 < n; ++x)
+            for (size_t x = 0; x + 1 < n; ++x)
             {
                 IntermediateTriangle tri = {};
 
@@ -753,6 +757,73 @@ struct IntermediateMesh
                 Triangles.push_back(tri);
             }
         }
+        InitBBox();
+    }
+
+    void MakeSphere(size_t nParallels, size_t nMeridians)
+    {
+        Vertices.clear();
+        Triangles.clear();
+        Vertices.reserve(nParallels * nMeridians + 2);
+        Triangles.reserve((nParallels + 2) * nMeridians);
+        IntermediateVertex   vert = {};
+        IntermediateTriangle tri  = {};
+        for (size_t iMeridian = 0; iMeridian < nMeridians; ++iMeridian)
+        {
+            size_t jMeridian = (iMeridian + 1) % nMeridians;
+            float  yaw       = XM_2PI * iMeridian / nMeridians;
+            float  yawSin    = 0.0f;
+            float  yawCos    = 0.0f;
+            XMScalarSinCos(&yawSin, &yawCos, yaw);
+            for (size_t iParallel = 0; iParallel < nParallels; ++iParallel)
+            {
+                float pitch    = XM_PI * (iParallel + 1) / (nParallels + 1);
+                float pitchSin = 0.0f;
+                float pitchCos = 0.0f;
+                XMScalarSinCos(&pitchSin, &pitchCos, pitch);
+
+                vert.m.Position.x = pitchSin * yawCos;
+                vert.m.Position.y = pitchCos;
+                vert.m.Position.z = pitchSin * -yawSin;
+                vert.m.Normal     = vert.m.Position;
+                Vertices.push_back(vert);
+            }
+            for (size_t iParallel = 0; iParallel + 1 < nParallels; ++iParallel)
+            {
+                tri.idx[0] = iMeridian * nParallels + iParallel;
+                tri.idx[1] = iMeridian * nParallels + iParallel + 1;
+                tri.idx[2] = jMeridian * nParallels + iParallel;
+                Triangles.push_back(tri);
+
+                tri.idx[0] = jMeridian * nParallels + iParallel + 1;
+                std::swap(tri.idx[1], tri.idx[2]);
+                ASSERT(tri.idx[0] < nParallels * nMeridians);
+                ASSERT(tri.idx[1] < nParallels * nMeridians);
+                ASSERT(tri.idx[2] < nParallels * nMeridians);
+                Triangles.push_back(tri);
+            }
+
+            tri.idx[0] = iMeridian * nParallels;
+            tri.idx[1] = jMeridian * nParallels;
+            tri.idx[2] = nMeridians * nParallels; // Первый полюс, положительный
+            Triangles.push_back(tri);
+
+            tri.idx[0] = nMeridians * nParallels + 1; // Второй полюс, отрицательный
+            tri.idx[1] = jMeridian * nParallels + nParallels - 1;
+            tri.idx[2] = iMeridian * nParallels + nParallels - 1;
+            Triangles.push_back(tri);
+        }
+
+        vert.m.Position.x = 0.0f;
+        vert.m.Position.y = 1.0f;
+        vert.m.Position.z = 0.0f;
+        vert.m.Normal     = vert.m.Position;
+        Vertices.push_back(vert);
+
+        vert.m.Position.y = -1.0f;
+        vert.m.Normal     = vert.m.Position;
+        Vertices.push_back(vert);
+
         InitBBox();
     }
 
@@ -1124,30 +1195,33 @@ struct IntermediateMesh
         }
 
         idx_t nparts = (loc.Triangles.size() + TARGET_PRIMITIVES - 1) / TARGET_PRIMITIVES;
-        nparts       = std::max(IDX_C(2), nparts);
-
-        idx_t options[METIS_NOPTIONS] = {};
-        METIS_SetDefaultOptions(options);
-        options[METIS_OPTION_NUMBERING] = 0;
-
-        idx_t edgecut = 0;
 
         std::vector<idx_t> part(nvtxs, 0);
+        if (nparts > 1)
+        {
+            idx_t options[METIS_NOPTIONS] = {};
+            METIS_SetDefaultOptions(options);
+            options[METIS_OPTION_NUMBERING] = 0;
 
-        int metisResult = METIS_PartGraphKway(&nvtxs,
-                                              &ncon,
-                                              xadj.data(),
-                                              adjncy.data(),
-                                              /* vwgt */ nullptr,
-                                              /* vsize */ nullptr,
-                                              /* adjwgt */ nullptr,
-                                              &nparts,
-                                              /* tpwgts */ nullptr,
-                                              /* ubvec */ nullptr,
-                                              options,
-                                              &edgecut,
-                                              part.data());
-        ASSERT_EQ(metisResult, METIS_OK);
+            idx_t edgecut = 0;
+
+            std::vector<idx_t> part(nvtxs, 0);
+
+            int metisResult = METIS_PartGraphKway(&nvtxs,
+                                                  &ncon,
+                                                  xadj.data(),
+                                                  adjncy.data(),
+                                                  /* vwgt */ nullptr,
+                                                  /* vsize */ nullptr,
+                                                  /* adjwgt */ nullptr,
+                                                  &nparts,
+                                                  /* tpwgts */ nullptr,
+                                                  /* ubvec */ nullptr,
+                                                  options,
+                                                  &edgecut,
+                                                  part.data());
+            ASSERT_EQ(metisResult, METIS_OK);
+        }
 
         for (IntermediateTriangle &tri : loc.Triangles)
         {
@@ -1264,18 +1338,54 @@ struct IntermediateMesh
         for (size_t iVert = 0; iVert < Vertices.size(); ++iVert)
             outModel.Vertices[iVert] = Vertices[iVert].m;
     }
+
+    void dbgSaveAsObj(const std::filesystem::path &path)
+    {
+        std::ofstream fout(path);
+        for (IntermediateVertex &v : Vertices)
+            fout << "v " << v.m.Position.x << " " << v.m.Position.y << " " << v.m.Position.z << "\n";
+        for (IntermediateVertex &v : Vertices)
+        {
+            if (v.IsBorder)
+                fout << "vt 1\n";
+            else
+                fout << "vt 0\n";
+        }
+        for (IntermediateTriangle &tri : Triangles)
+        {
+            if (tri.IsDeleted)
+                continue;
+            fout << "f";
+            for (size_t iVert : tri.idx)
+                fout << " " << iVert + 1 << "/" << iVert + 1;
+            fout << "\n";
+        }
+    }
 };
 
 int main()
 {
     IntermediateMesh mesh;
 
+    // Для отладки самой децимации пока будем выводить результат децимации сферы
+    mesh.MakeSphere(32, 32);
+    mesh.DoFirstPartition();
+    std::vector<size_t> meshletIdx(mesh.MeshletTriangles.PartCount());
+    for (size_t i = 0; i < meshletIdx.size(); ++i)
+        meshletIdx[i] = i;
+    IntermediateMeshlet meshlet;
+    meshlet.Init(mesh.Vertices, mesh.MeshletTriangles, meshletIdx, 0);
+    std::cout << "Init triangles: " << meshlet.Triangles.size() << std::endl;
+    meshlet.Decimate();
+    std::cout << "Triangles left: " << meshlet.Triangles.size() << std::endl;
+    meshlet.dbgSaveAsObj(9999, true);
+    return 0;
+
     std::cout << "Loading model...\n";
-#if true
-    mesh.LoadGLB("input.glb");
-#else
-    mesh.MakePlane(64);
-#endif
+    // mesh.LoadGLB("plane1.glb");
+    // mesh.LoadGLB("input.glb");
+    // mesh.MakePlane(64);
+    mesh.MakeSphere(128, 128);
     std::cout << "Loading model done\n";
 
     size_t nVertices  = mesh.Vertices.size();
