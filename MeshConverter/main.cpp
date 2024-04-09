@@ -145,6 +145,8 @@ struct IntermediateMeshlet
         std::unordered_map<MeshEdge, size_t> edgeTriangleCount;
         for (const IntermediateTriangle &tri : Triangles)
         {
+            for (size_t iVert : tri.idx)
+                Vertices[iVert].IsBorder = false;
             for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
             {
                 MeshEdge edge        = tri.EdgeKey(iTriEdge);
@@ -378,6 +380,7 @@ struct IntermediateMeshlet
             return VertexError(q, out);
         }
 
+        /*
         XMVECTOR det  = XMVectorZero();
         XMMATRIX qInv = XMMatrixInverse(&det, q);
         if (fabs(XMVectorGetX(det)) >= 0.001)
@@ -385,23 +388,36 @@ struct IntermediateMeshlet
             out = XMVector4Transform(XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f), qInv);
             return VertexError(q, out);
         }
+        */
 
         XMVECTOR p3   = 0.5 * (p1 + p2);
         float    err1 = VertexError(q, p1);
         float    err2 = VertexError(q, p2);
         float    err3 = VertexError(q, p3);
-        // if (err1 <= err2 && err1 <= err3)
-        //{
-        //     out = p1;
-        //     return err1;
-        // }
-        // if (err2 <= err1 && err2 <= err3)
-        //{
-        //     out = p2;
-        //     return err2;
-        // }
+        /*
+        if (err1 <= err2 && err1 <= err3)
+        {
+            out = p1;
+            return err1;
+        }
+        if (err2 <= err1 && err2 <= err3)
+        {
+            out = p2;
+            return err2;
+        }
         out = p3;
         return err3;
+        */
+        if (err1 <= err2)
+        {
+            out = p1;
+            return err1;
+        }
+        else
+        {
+            out = p2;
+            return err2;
+        }
     }
 
     float VertexError(const XMMATRIX &q, XMVECTOR v)
@@ -483,10 +499,10 @@ struct IntermediateMeshlet
             XMVECTOR nacNew  = XMVector3Normalize(acNew);
             XMVECTOR normOld = XMVector3Cross(abOld, acOld);
             XMVECTOR normNew = XMVector3Cross(abNew, acNew);
-            if (XMVectorGetX(XMVector3Dot(normNew, normOld)) < 0.0)
-                return true;
-            if (fabs(XMVectorGetX(XMVector3Dot(nabNew, nacNew))) > 0.999)
-                return true;
+            // if (XMVectorGetX(XMVector3Dot(normNew, normOld)) < 0.0)
+            //     return true;
+            // if (fabs(XMVectorGetX(XMVector3Dot(nabNew, nacNew))) > 0.999)
+            //     return true;
             tri.Normal = normNew;
         }
         return false;
@@ -1171,6 +1187,8 @@ struct IntermediateMesh
         idx_t nvtxs  = loc.Triangles.size();
         idx_t ncon   = 1;
         idx_t nparts = (nvtxs + TARGET_PRIMITIVES - 1) / TARGET_PRIMITIVES;
+        if (nvtxs <= MESHLET_MAX_PRIMITIVES)
+            nparts = 1;
 
         std::vector<idx_t> part(nvtxs, 0);
 
@@ -1288,6 +1306,8 @@ struct IntermediateMesh
             std::unordered_map<MeshEdge, size_t> edgeTriangleCount;
             for (const IntermediateTriangle &tri : MeshletTriangles[iMeshlet])
             {
+                for (size_t iVert : tri.idx)
+                    Vertices[iVert].IsBorder = false;
                 for (size_t iTriEdge = 0; iTriEdge < 3; ++iTriEdge)
                 {
                     MeshEdge edge        = tri.EdgeKey(iTriEdge);
@@ -1295,13 +1315,12 @@ struct IntermediateMesh
                     iter->second++;
                 }
             }
-            std::unordered_set<size_t> borderVertices;
             for (const auto &[edge, nTris] : edgeTriangleCount)
             {
                 if (nTris >= 2)
                     continue;
                 for (size_t iVert : {edge.first, edge.second})
-                    borderVertices.insert(nTris);
+                    Vertices[iVert].IsBorder = true;
             }
 
             for (const IntermediateTriangle &tri : MeshletTriangles[iMeshlet])
@@ -1309,16 +1328,17 @@ struct IntermediateMesh
                 uint encodedTriangle = 0;
                 for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
                 {
-                    size_t iVert    = tri.idx[iTriVert];
-                    uint   iLocVert = Vertices[iVert].OtherIndex;
+                    size_t              iVert    = tri.idx[iTriVert];
+                    IntermediateVertex &vert     = Vertices[iVert];
+                    uint                iLocVert = vert.OtherIndex;
                     // Если вершина ещё не использована в этом мешлете,
                     // назначим ей новый индекс
-                    if (!Vertices[iVert].Visited)
+                    if (!vert.Visited)
                     {
-                        Vertices[iVert].Visited    = true;
-                        iLocVert                   = meshlet.VertCount++;
-                        Vertices[iVert].OtherIndex = iLocVert;
-                        if (borderVertices.find(iVert) != borderVertices.end())
+                        vert.Visited    = true;
+                        iLocVert        = meshlet.VertCount++;
+                        vert.OtherIndex = iLocVert;
+                        if (vert.IsBorder)
                             outModel.GlobalIndices.push_back(iVert | UINT32_C(0x80000000));
                         else
                             outModel.GlobalIndices.push_back(iVert);
