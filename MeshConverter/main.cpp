@@ -345,7 +345,9 @@ struct IntermediateMeshlet
             for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
             {
                 IntermediateVertex &vert = Vertices[tri.idx[iTriVert]];
-                XMVECTOR            acc  = XMLoadFloat3(&vert.m.Normal);
+                if (vert.IsBorder)
+                    continue;
+                XMVECTOR acc = XMLoadFloat3(&vert.m.Normal);
                 XMStoreFloat3(&vert.m.Normal, acc + norm);
             }
         }
@@ -355,7 +357,7 @@ struct IntermediateMeshlet
             if (vert.IsBorder)
                 continue;
             XMVECTOR norm = XMLoadFloat3(&vert.m.Normal);
-            norm          = XMVector3Normalize(norm);
+            norm          = XMVector3Normalize(XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
             XMStoreFloat3(&vert.m.Normal, norm);
         }
     }
@@ -442,8 +444,7 @@ struct IntermediateMeshlet
                 continue;
             if (deleted[iiTriangle - vertTrisBeg])
             {
-                if (!tri.IsDeleted)
-                    nDeletedTriangles++;
+                nDeletedTriangles++;
                 tri.IsDeleted = true;
                 continue;
             }
@@ -453,6 +454,14 @@ struct IntermediateMeshlet
             tri.Error[1]      = CalculateError(tri.idx[1], tri.idx[2], p);
             tri.Error[2]      = CalculateError(tri.idx[2], tri.idx[0], p);
             tri.Error[0]      = XMMin(tri.Error[0], XMMin(tri.Error[1], tri.Error[2]));
+
+            XMVECTOR oa = XMLoadFloat3(&Vertices[tri.idx[0]].m.Position);
+            XMVECTOR ob = XMLoadFloat3(&Vertices[tri.idx[1]].m.Position);
+            XMVECTOR oc = XMLoadFloat3(&Vertices[tri.idx[2]].m.Position);
+            XMVECTOR ab = ob - oa;
+            XMVECTOR ac = oc - oa;
+            tri.Normal  = XMVector3Normalize(XMVector3Cross(ab, ac));
+
             ClusterTriangles.Push({iTriangle, iTriVert});
         }
         for (const IntermediateTriangle &tri : Triangles)
@@ -471,7 +480,7 @@ struct IntermediateMeshlet
         IntermediateVertex              &vert2   = Vertices[jVert];
         Slice<std::pair<size_t, size_t>> refs    = VertexTriangles(iVert);
 
-        XMVECTOR pa = XMLoadFloat3(&Vertices[iVert].m.Position);
+        XMVECTOR oa = XMLoadFloat3(&Vertices[iVert].m.Position);
 
         for (size_t iiiTriangle = 0; iiiTriangle < refs.Size(); ++iiiTriangle)
         {
@@ -487,23 +496,22 @@ struct IntermediateMeshlet
                 continue;
             }
 
-            XMVECTOR pb      = XMLoadFloat3(&Vertices[iVert1].m.Position);
-            XMVECTOR pc      = XMLoadFloat3(&Vertices[iVert2].m.Position);
-            XMVECTOR abOld   = pb - pa;
-            XMVECTOR acOld   = pc - pa;
-            XMVECTOR abNew   = pb - p;
-            XMVECTOR acNew   = pc - p;
+            XMVECTOR ob      = XMLoadFloat3(&Vertices[iVert1].m.Position);
+            XMVECTOR oc      = XMLoadFloat3(&Vertices[iVert2].m.Position);
+            XMVECTOR abOld   = ob - oa;
+            XMVECTOR acOld   = oc - oa;
+            XMVECTOR abNew   = ob - p;
+            XMVECTOR acNew   = oc - p;
             XMVECTOR nabOld  = XMVector3Normalize(abOld);
             XMVECTOR nacOld  = XMVector3Normalize(acOld);
             XMVECTOR nabNew  = XMVector3Normalize(abNew);
             XMVECTOR nacNew  = XMVector3Normalize(acNew);
             XMVECTOR normOld = XMVector3Cross(abOld, acOld);
             XMVECTOR normNew = XMVector3Cross(abNew, acNew);
-            // if (XMVectorGetX(XMVector3Dot(normNew, normOld)) < 0.0)
-            //     return true;
-            // if (fabs(XMVectorGetX(XMVector3Dot(nabNew, nacNew))) > 0.999)
-            //     return true;
-            tri.Normal = normNew;
+            if (XMVectorGetX(XMVector3Dot(normNew, normOld)) < 0.0)
+                return true;
+            if (fabs(XMVectorGetX(XMVector3Dot(nabNew, nacNew))) > 0.999)
+                return true;
         }
         return false;
     }
@@ -1408,8 +1416,8 @@ int main()
     std::cout << "Loading model...\n";
     // mesh.LoadGLB("plane1.glb");
     // mesh.LoadGLB("input.glb");
-    // mesh.MakePlane(64);
-    mesh.MakeSphere(64, 64);
+    mesh.MakePlane(64);
+    // mesh.MakeSphere(64, 64);
     std::cout << "Loading model done\n";
 
     size_t nVertices  = mesh.Vertices.size();
