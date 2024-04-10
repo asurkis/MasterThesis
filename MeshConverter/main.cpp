@@ -1224,8 +1224,6 @@ struct IntermediateMesh
 
             idx_t edgecut = 0;
 
-            std::vector<idx_t> part(nvtxs, 0);
-
             int metisResult = METIS_PartGraphKway(&nvtxs,
                                                   &ncon,
                                                   xadj.data(),
@@ -1268,8 +1266,9 @@ struct IntermediateMesh
         SplitVector<size_t> triangleIdx(nparts, Slice(part));
         for (size_t iPart = 0; iPart < triangleIdx.PartCount(); ++iPart)
         {
-            // if (triangleIdx[iPart].Size() > MESHLET_MAX_PRIMITIVES)
-            //     std::cerr << "Decimation fail: size = " << triangleIdx[iPart].Size() << "\n";
+            if (triangleIdx[iPart].Size() > MESHLET_MAX_PRIMITIVES)
+                std::cerr << "Decimation fail: size = " << triangleIdx[iPart].Size() << " out of " << nvtxs << " and "
+                          << nparts << " parts\n";
             for (size_t iTriangle : triangleIdx[iPart])
                 MeshletTriangles.Push(loc.Triangles[iTriangle]);
             MeshletTriangles.PushSplit();
