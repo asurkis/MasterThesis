@@ -1,0 +1,64 @@
+\documentclass[14pt]{extarticle}
+
+\usepackage[T2A]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[russian]{babel}
+\usepackage[a4paper,left=30mm,right=15mm,top=20mm,bottom=20mm]{geometry}
+\usepackage{amsmath}
+\usepackage{titlesec}
+\usepackage{tocloft}
+\usepackage{minted}
+\usepackage{indentfirst}
+% \usepackage{fontspec}
+% \usepackage{mathtools}
+% \usepackage{wasysym}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{csquotes}
+\usepackage[backend=biber,sorting=none,bibstyle=gost-numeric]{biblatex}
+
+% TODO: replace with Times New Roman
+% \setmainfont{LiberationSerif}
+% \setmainfont{Times New Roman}
+% \setmonofont{JetBrains Mono}
+
+\setlength{\parindent}{1.25cm}
+\renewcommand{\baselinestretch}{1.5}
+
+\usetikzlibrary{decorations.text}
+\setcounter{secnumdepth}{0}
+
+\bibliography{refs}
+
+\DeclareCaptionLabelSeparator{mdash}{ --- }
+\captionsetup{labelsep=mdash}
+\captionsetup[table]{justification=justified,singlelinecheck=off}
+
+\begin{document}
+    \makeatletter
+    \renewcommand{\fnum@figure}{Рисунок \thefigure}
+    \makeatother
+    \renewcommand{\labelenumi}{\arabic{enumi})}
+    \renewcommand{\labelenumii}{\arabic{enumi}.\arabic{enumii})}
+
+    \titleformat{\section}[block]{\Large\bfseries\filcenter}{}{1em}{}
+    \renewcommand{\cftsecdotsep}{\cftdotsep}
+    \renewcommand{\cftsubsecfont}{\bfseries}
+
+    \renewcommand{\contentsname}{СОДЕРЖАНИЕ}
+    \tableofcontents
+
+    \input{terminology.tex}
+    \input{introduction.tex}
+    % \input{chapter1.tex}
+    % \input{chapter2.tex}
+    % \input{chapter3.tex}
+    % \input{chapter4.tex}
+    % \input{conclusion.tex}
+    % \input{bibliography.tex}
+    % \appendix
+    % \input{appendix.tex}
+\end{document}
