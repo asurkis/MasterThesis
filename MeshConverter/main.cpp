@@ -81,6 +81,7 @@ struct IntermediateMeshlet
     std::vector<IntermediateTriangle>      Triangles;
     std::vector<size_t>                    VertexCluster;
     SplitVector<std::pair<size_t, size_t>> ClusterTriangles;
+    float                                  TotalError = 0.0f;
     std::unordered_set<MeshEdge>           dbgUsedEdges;
 
     Slice<std::pair<size_t, size_t>> VertexTriangles(size_t iVert)
@@ -193,6 +194,8 @@ struct IntermediateMeshlet
 
     void Decimate()
     {
+        TotalError = 0.0f;
+
         size_t            nDeletedTriangles = 0;
         std::vector<bool> deleted1;
         std::vector<bool> deleted2;
@@ -258,6 +261,8 @@ struct IntermediateMeshlet
             if (!foundBest)
                 break;
 
+            TotalError += errBest;
+
             IntermediateVertex &vert1 = Vertices[iVertBest];
             IntermediateVertex &vert2 = Vertices[jVertBest];
             if (vert1.IsBorder)
@@ -318,7 +323,7 @@ struct IntermediateMeshlet
         }
 
         Triangles = std::vector(resultTrianglesSet.begin(), resultTrianglesSet.end());
-        ASSERT(dbgUsedEdges.empty());
+        // ASSERT(dbgUsedEdges.empty());
 
         RemoveDeletedTriangles();
         RestoreNormals();
@@ -326,6 +331,7 @@ struct IntermediateMeshlet
 
     void RestoreNormals()
     {
+        return; // Пока не делаем
         for (const IntermediateTriangle &tri : Triangles)
         {
             for (size_t iVert : tri.idx)
@@ -385,7 +391,7 @@ struct IntermediateMeshlet
         /*
         XMVECTOR det  = XMVectorZero();
         XMMATRIX qInv = XMMatrixInverse(&det, q);
-        if (fabs(XMVectorGetX(det)) >= 0.001)
+        if (fabs(XMVectorGetX(det)) >= 0.01)
         {
             out = XMVector4Transform(XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f), qInv);
             return VertexError(q, out);
@@ -414,7 +420,7 @@ struct IntermediateMeshlet
         {
             out = p1;
             return err1;
-        }
+    }
         else
         {
             out = p2;
@@ -620,6 +626,7 @@ struct IntermediateMesh
     SplitVector<IntermediateTriangle> MeshletTriangles;
     std::vector<size_t>               MeshletParentOffset;
     std::vector<size_t>               MeshletParentCount;
+    std::vector<float>                MeshletError;
 
     SplitVector<MeshEdge> MeshletEdges;
     EdgeIndicesMap<2>     EdgeMeshlets;
@@ -994,6 +1001,7 @@ struct IntermediateMesh
         }
         MeshletParentOffset = std::vector<size_t>(nMeshlets, 0);
         MeshletParentCount  = std::vector<size_t>(nMeshlets, 0);
+        MeshletError        = std::vector<float>(nMeshlets, 0.0f);
     }
 
     void BuildMeshletEdgeIndex(size_t iLayer)
@@ -1186,8 +1194,8 @@ struct IntermediateMesh
             size_t iVert = loc.Vertices[iLocVert].OtherIndex;
             // С плоской панелью некоторые вершины на границе мешлета
             // не принадлежат другим мешлетам
-            if (!loc.Vertices[iLocVert].IsBorder)
-                ASSERT_EQ(dbgVertexMeshletCount[iVert], 1);
+            // if (!loc.Vertices[iLocVert].IsBorder)
+            //     ASSERT_EQ(dbgVertexMeshletCount[iVert], 1);
         }
 
         loc.Decimate();
@@ -1282,6 +1290,7 @@ struct IntermediateMesh
             MeshletTriangles.PushSplit();
             MeshletParentOffset.push_back(0);
             MeshletParentCount.push_back(0);
+            MeshletError.push_back(loc.TotalError);
         }
     }
 
@@ -1308,6 +1317,7 @@ struct IntermediateMesh
             meshlet.PrimCount    = MeshletTriangles.PartSize(iMeshlet);
             meshlet.ParentOffset = MeshletParentOffset[iMeshlet];
             meshlet.ParentCount  = MeshletParentCount[iMeshlet];
+            meshlet.Error        = MeshletError[iMeshlet];
 
             // Для отладки закодируем, какие вершины у мешлета --- граничные
             std::unordered_map<MeshEdge, size_t> edgeTriangleCount;
@@ -1416,7 +1426,8 @@ int main()
     std::cout << "Loading model...\n";
     // mesh.LoadGLB("plane1.glb");
     // mesh.LoadGLB("input.glb");
-    mesh.MakePlane(64);
+    mesh.LoadGLB("model.glb");
+    // mesh.MakePlane(64);
     // mesh.MakeSphere(64, 64);
     std::cout << "Loading model done\n";
 

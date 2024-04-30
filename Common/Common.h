@@ -12,14 +12,14 @@ struct Vertex
 
 struct MeshletDesc
 {
-    uint VertCount;
-    uint VertOffset;
-    uint PrimCount;
-    uint PrimOffset;
-    uint ParentCount;
-    uint ParentOffset;
-    uint Height;
-    uint _padding;
+    uint  VertCount;
+    uint  VertOffset;
+    uint  PrimCount;
+    uint  PrimOffset;
+    uint  ParentCount;
+    uint  ParentOffset;
+    uint  Height;
+    float Error;
 };
 
 struct BoundingBox
