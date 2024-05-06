@@ -42,7 +42,7 @@ bool IsEnough(float4x4 MatFull, float err, TBoundingBox box, out float VisibleRa
         return true;
     float r = diameter / hs.w;
     VisibleRadius = r;
-    return err * r < Camera.FloatInfo.w;
+    return err * r < MainCB.FloatInfo.w;
     // return r < Camera.FloatInfo.w;
 }
 
@@ -53,10 +53,10 @@ bool ShouldDisplay(float4x4 MatFull, uint iMeshlet, out float VisibleRadius)
     
     TMeshlet meshlet = Meshlets[iMeshlet];
     TBoundingBox box = MeshletBoxes[iMeshlet];
-    if (Camera.IntInfo.x != 0xFFFFFFFF)
+    if (MainCB.IntInfo.x != 0xFFFFFFFF)
     {
         IsEnough(MatFull, meshlet.Error, box, VisibleRadius);
-        return meshlet.Height == Camera.IntInfo.x / 3;
+        return meshlet.Height == MainCB.IntInfo.x / 3;
     }
     
     uint iParent = meshlet.ParentOffset;
@@ -91,14 +91,14 @@ void main(
         GetZCodeComponent3(iInstance >> 0),
         GetZCodeComponent3(iInstance >> 1),
         GetZCodeComponent3(iInstance >> 2));
-    float3 off = mOff * Camera.FloatInfo.xyz;
+    float3 off = mOff * MainCB.FloatInfo.xyz;
     float4x4 MatTranslate = float4x4(
         float4(1.0f, 0.0f, 0.0f, 0.0f),
         float4(0.0f, 1.0f, 0.0f, 0.0f),
         float4(0.0f, 0.0f, 1.0f, 0.0f),
         float4(-off, 1.0f)
     );
-    float4x4 MatFull = mul(MatTranslate, Camera.MatViewProj);
+    float4x4 MatFull = mul(MatTranslate, MainCB.MatViewProj);
     float VisibleRadius = 0.0f;
     bool shouldDisplay = ShouldDisplay(MatFull, iMeshlet, VisibleRadius);
     
@@ -111,8 +111,8 @@ void main(
     {
         p.MeshletIndex[current] = iMeshlet;
         p.AdditionalInfo[current].x = VisibleRadius;
-        p.AdditionalInfo[current].y = Camera.FloatInfo.w;
-        p.AdditionalInfo[current].z = VisibleRadius < Camera.FloatInfo.w ? 0.0f : 1.0f;
+        p.AdditionalInfo[current].y = MainCB.FloatInfo.w;
+        p.AdditionalInfo[current].z = VisibleRadius < MainCB.FloatInfo.w ? 0.0f : 1.0f;
         p.AdditionalInfo[current].w = 0.0f;
     }
     DispatchMesh(nDispatch, 1, 1, p);

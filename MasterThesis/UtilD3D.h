@@ -29,7 +29,29 @@ void WaitForLastFrame();
 void WaitForAllFrames();
 void ExecuteCommandList();
 
-class MeshPipeline
+struct MainConstantBuffer
+{
+    float4x4 MatView;
+    float4x4 MatProj;
+    float4x4 MatViewProj;
+    float4x4 MatNormal;
+    float4   FloatInfo; // xyz = InstanceOffset, w = ErrorThreshold
+    uint4    IntInfo;   // x = DisplayType
+};
+
+class MonoPipeline
+{
+    PPipelineState pPipelineState;
+    PRootSignature pRootSignature;
+
+  public:
+    void Load(const std::filesystem::path &pathVS, const std::filesystem::path &pathPS);
+
+    ID3D12PipelineState *GetStateRaw() const noexcept { return pPipelineState.Get(); }
+    ID3D12RootSignature *GetRootSignatureRaw() const noexcept { return pRootSignature.Get(); }
+};
+
+class MeshletPipeline
 {
     PPipelineState pPipelineState;
     PRootSignature pRootSignature;
@@ -48,7 +70,20 @@ class MeshPipeline
     ID3D12RootSignature *GetRootSignatureRaw() const noexcept { return pRootSignature.Get(); }
 };
 
-class ModelGPU
+class MonoLodGPU
+{
+    PResource                pVertices;
+    PResource                pIndices;
+    D3D12_VERTEX_BUFFER_VIEW mVertexBufferView;
+    D3D12_INDEX_BUFFER_VIEW  mIndexBufferView;
+    uint                     nIndices;
+
+  public:
+    void Upload(const MonoLodCPU &model);
+    void Render(const MainConstantBuffer &MainCB, float3 InstanceOffset) const;
+};
+
+class MeshletModelGPU
 {
     PResource pVertices;
     PResource pGlobalIndices;

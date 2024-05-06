@@ -636,7 +636,7 @@ struct IntermediateMesh
 
     void LoadGLB(const std::string &path)
     {
-        MonoModelCPU mono;
+        MonoLodCPU mono;
         mono.LoadGLB(path);
 
         Vertices.clear();

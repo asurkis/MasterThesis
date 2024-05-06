@@ -30,7 +30,7 @@ template <typename T> static void ReadVec(std::istream &sin, std::vector<T> &dat
     sin.read(reinterpret_cast<char *>(data.data()), size * sizeof(T));
 }
 
-void MonoModelCPU::LoadGLB(const std::string &path)
+void MonoLodCPU::LoadGLB(const std::string &path)
 {
     tinygltf::Model    inModel;
     tinygltf::TinyGLTF tinyGltfCtx;

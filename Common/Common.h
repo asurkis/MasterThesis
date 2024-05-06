@@ -58,7 +58,7 @@ struct MeshDesc
     uint MeshletTriangleOffsets;
 };
 
-struct MonoModelCPU
+struct MonoLodCPU
 {
     std::vector<Vertex> Vertices;
     std::vector<uint>   Indices;

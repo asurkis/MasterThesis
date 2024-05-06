@@ -84,9 +84,9 @@ void main(
 {
     float4x4 MatTransform = Payload.MatTransform;
     TMeshletExpanded e;
-    e.MatTransView = mul(MatTransform, Camera.MatView);
-    e.MatTransViewProj = mul(MatTransform, Camera.MatViewProj);
-    e.MatTransNormal = mul(MatTransform, Camera.MatNormal);
+    e.MatTransView = mul(MatTransform, MainCB.MatView);
+    e.MatTransViewProj = mul(MatTransform, MainCB.MatViewProj);
+    e.MatTransNormal = mul(MatTransform, MainCB.MatNormal);
     e.AdditionalInfo = Payload.AdditionalInfo[gid];
 
     e.iMeshlet = Payload.MeshletIndex[gid];

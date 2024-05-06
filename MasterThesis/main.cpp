@@ -5,6 +5,8 @@
 #include "UtilWin32.h"
 #include <DirectXMath.h>
 
+#define USE_MONO_LODS
+
 using namespace DirectX;
 
 bool useVSync = true;
@@ -19,8 +21,12 @@ enum SrvDescriptors
 PDescriptorHeap pSrvHeap;
 UINT            srvDescSize;
 
-MeshPipeline mainPipeline;
-MeshPipeline aabbPipeline;
+#ifdef USE_MONO_LODS
+MonoPipeline mainPipeline;
+#else
+MeshletPipeline mainPipeline;
+MeshletPipeline aabbPipeline;
+#endif
 
 // XMVECTOR camPos   = XMVectorSet(-100.0f, 80.0f, 150.0f, 0.0f);
 // float    camRotX  = XMConvertToRadians(0.0f);
@@ -39,25 +45,21 @@ int   displayType    = -1;
 float3 instanceOffset = float3(10.0f, 10.0f, 10.0f);
 int    nInstances     = 1;
 
+#ifndef USE_MONO_LODS
 bool drawModel       = true;
 bool drawMeshletAABB = false;
+#endif
 
-struct Camera
-{
-    float4x4 MatView;
-    float4x4 MatProj;
-    float4x4 MatViewProj;
-    float4x4 MatNormal;
-    float4   FloatInfo; // xyz = InstanceOffset, w = ErrorThreshold
-    uint4    IntInfo;   // x = DisplayType
-};
+MainConstantBuffer MainCB;
+PResource          pCameraGPU;
 
-Camera    CameraCB;
-PResource pCameraGPU;
+#ifdef USE_MONO_LODS
+std::vector<MonoLodGPU> lods;
+#else
+MeshletModelGPU model;
+#endif
 
-ModelGPU model;
-
-void LoadAssets()
+static void LoadAssets()
 {
     std::filesystem::path assetPath = GetAssetPath();
 
@@ -70,11 +72,15 @@ void LoadAssets()
         srvDescSize = pDevice->GetDescriptorHandleIncrementSize(srvDesc.Type);
     }
 
+#ifdef USE_MONO_LODS
+    mainPipeline.Load(assetPath / "MainVS.cso", assetPath / "MainPS.cso");
+#else
     mainPipeline.Load(assetPath / "MainMS.cso", assetPath / "MainPS.cso", assetPath / "MainAS.cso");
     aabbPipeline.Load(assetPath / "AABB_MS.cso", assetPath / "AABB_PS.cso", assetPath / "MainAS.cso");
+#endif
 
     {
-        UINT                    camBufSize = sizeof(CameraCB);
+        UINT                    camBufSize = sizeof(MainCB);
         CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_UPLOAD);
         auto                    desc = CD3DX12_RESOURCE_DESC::Buffer(camBufSize);
         ThrowIfFailed(pDevice->CreateCommittedResource(&heapProps,
@@ -85,9 +91,21 @@ void LoadAssets()
                                                        IID_PPV_ARGS(&pCameraGPU)));
     }
 
+#ifdef USE_MONO_LODS
+    lods.resize(1);
+    for (size_t iLod = 0; iLod < lods.size(); ++iLod)
+    {
+        std::ostringstream lodPath;
+        lodPath << "../Assets/Statue_LOD" << iLod + 2 << ".glb";
+        MonoLodCPU modelCpu;
+        modelCpu.LoadGLB(lodPath.str());
+        lods[iLod].Upload(modelCpu);
+    }
+#else
     MeshletModelCPU modelCpu;
     modelCpu.LoadFromFile("../Assets/model.bin");
     model.Upload(modelCpu);
+#endif
 }
 
 class RaiiImgui
@@ -126,7 +144,7 @@ class RaiiImgui
 
 std::optional<RaiiImgui> raiiImgui;
 
-void FillCommandList()
+static void FillCommandList()
 {
     ThrowIfFailed(pCommandAllocator->Reset());
     ThrowIfFailed(pCommandList->Reset(pCommandAllocator.Get(), mainPipeline.GetStateRaw()));
@@ -166,20 +184,20 @@ void FillCommandList()
 
     pCommandList->SetGraphicsRootSignature(mainPipeline.GetRootSignatureRaw());
     pCommandList->SetGraphicsRootConstantBufferView(0, pCameraGPU->GetGPUVirtualAddress());
+#ifdef USE_MONO_LODS
+    lods[0].Render(MainCB, float3(0.0f, 0.0f, 0.0f));
+#else
     if (drawModel)
     {
-        pCommandList->SetGraphicsRoot32BitConstant(1, *reinterpret_cast<uint *>(&errorThreshold), 2);
-        pCommandList->SetGraphicsRoot32BitConstant(1, displayType < 0 ? UINT32_MAX : displayType, 3);
         model.Render(nInstances);
     }
 
     if (drawMeshletAABB)
     {
         pCommandList->SetPipelineState(aabbPipeline.GetStateRaw());
-        pCommandList->SetGraphicsRoot32BitConstant(1, *reinterpret_cast<uint *>(&errorThreshold), 2);
-        pCommandList->SetGraphicsRoot32BitConstant(1, displayType < 0 ? UINT32_MAX : displayType, 3);
         model.Render(nInstances);
     }
+#endif
 
     ImGui::Render();
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCommandList.Get());
@@ -213,10 +231,14 @@ void OnRender()
         ImGui::Text("Rotation X: %.1f deg", XMConvertToDegrees(camRotX));
         ImGui::Text("Rotation Y: %.1f deg", XMConvertToDegrees(camRotY));
     }
+#ifdef USE_MONO_LODS
+    ImGui::SliderInt("LOD", &displayType, -1, lods.size());
+#else
     ImGui::Checkbox("Draw model", &drawModel);
     ImGui::Checkbox("Draw meshlet AABB", &drawMeshletAABB);
-    ImGui::SliderFloat("Error threshold", &errorThreshold, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::SliderInt("Meshlet layer", &displayType, -1, 3 * model.MaxLayer() + 1);
+#endif
+    ImGui::SliderFloat("Error threshold", &errorThreshold, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::SliderInt("Object count", &nInstances, 1, 512);
     ImGui::SliderFloat("Object Offset X", &instanceOffset.x, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::SliderFloat("Object Offset Y", &instanceOffset.y, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
@@ -288,17 +310,17 @@ void OnRender()
 
     XMMATRIX matTrans = XMMatrixTranslationFromVector(camOffset * vecForward - camFocus);
 
-    CameraCB.MatView     = XMMatrixTranspose(matTrans * matRot);
-    CameraCB.MatProj     = XMMatrixTranspose(XMMatrixPerspectiveFovRH(45.0f, aspect, 1000000.0f, 0.001f));
-    CameraCB.MatViewProj = CameraCB.MatProj * CameraCB.MatView;
-    CameraCB.MatNormal   = XMMatrixTranspose(XMMatrixInverse(nullptr, CameraCB.MatView));
-    CameraCB.FloatInfo   = XMVectorSet(instanceOffset.x, instanceOffset.y, instanceOffset.z, errorThreshold);
-    CameraCB.IntInfo     = XMVectorSetInt(displayType < 0 ? UINT32_MAX : displayType, 0, 0, 0);
+    MainCB.MatView     = XMMatrixTranspose(matTrans * matRot);
+    MainCB.MatProj     = XMMatrixTranspose(XMMatrixPerspectiveFovRH(45.0f, aspect, 1000000.0f, 0.001f));
+    MainCB.MatViewProj = MainCB.MatProj * MainCB.MatView;
+    MainCB.MatNormal   = XMMatrixTranspose(XMMatrixInverse(nullptr, MainCB.MatView));
+    MainCB.FloatInfo   = XMVectorSet(instanceOffset.x, instanceOffset.y, instanceOffset.z, errorThreshold);
+    MainCB.IntInfo     = XMVectorSetInt(displayType < 0 ? UINT32_MAX : displayType, 0, 0, 0);
 
     void         *pCameraDataBegin = nullptr;
     CD3DX12_RANGE readRange(0, 0);
     ThrowIfFailed(pCameraGPU->Map(0, &readRange, &pCameraDataBegin));
-    memcpy(pCameraDataBegin, &CameraCB, sizeof(CameraCB));
+    memcpy(pCameraDataBegin, &MainCB, sizeof(MainCB));
     pCameraGPU->Unmap(0, nullptr);
 
     FillCommandList();

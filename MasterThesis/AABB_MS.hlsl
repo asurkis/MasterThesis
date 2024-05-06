@@ -10,8 +10,8 @@ VertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
     TVertex v = Vertices[vertexIndex];
 
     VertexOut vout;
-    vout.PositionVS = mul(float4(v.Position, 1), Camera.MatView).xyz;
-    vout.PositionHS = mul(float4(v.Position, 1), Camera.MatViewProj);
+    vout.PositionVS = mul(float4(v.Position, 1), MainCB.MatView).xyz;
+    vout.PositionHS = mul(float4(v.Position, 1), MainCB.MatViewProj);
     vout.MeshletIndex = meshletIndex;
 
     return vout;
@@ -41,8 +41,8 @@ void main(
         ogPos.z = gtid & 4 ? box.Max.z : box.Min.z;
 
         VertexOut vout;
-        vout.PositionVS = mul(float4(ogPos, 1), Camera.MatView).xyz;
-        vout.PositionHS = mul(float4(ogPos, 1), Camera.MatViewProj);
+        vout.PositionVS = mul(float4(ogPos, 1), MainCB.MatView).xyz;
+        vout.PositionHS = mul(float4(ogPos, 1), MainCB.MatViewProj);
         vout.MeshletIndex = iMeshlet;
         verts[gtid] = vout;
     }

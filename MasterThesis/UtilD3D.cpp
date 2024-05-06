@@ -79,7 +79,8 @@ void CreateDepthBuffer(UINT width, UINT height)
 
 void LoadPipeline(UINT width, UINT height)
 {
-#ifdef _DEBUG
+// #ifdef _DEBUG
+#if true
     {
         ComPtr<ID3D12Debug> debugController;
         if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
@@ -243,9 +244,65 @@ void UpdateRenderTargetSize(UINT width, UINT height)
 
 PResource GetCurRenderTarget() { return pRenderTargets[curFrame]; }
 
-void MeshPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeAS,
-                                const std::vector<BYTE> &bytecodeMS,
-                                const std::vector<BYTE> &bytecodePS)
+void MonoPipeline::Load(const std::filesystem::path &pathVS, const std::filesystem::path &pathPS)
+{
+    PPipelineState pPipelineState;
+    PRootSignature pRootSignature;
+
+    std::vector<BYTE> bytecodeVS = ReadFile(pathVS);
+    std::vector<BYTE> bytecodePS = ReadFile(pathPS);
+
+    ThrowIfFailed(pDevice->CreateRootSignature(0, bytecodeVS.data(), bytecodeVS.size(), IID_PPV_ARGS(&pRootSignature)));
+
+    enum
+    {
+        IE_POSITION = 0,
+        IE_NORMAL,
+        IE_TOTAL
+    };
+
+    D3D12_INPUT_ELEMENT_DESC inputElementDesc[IE_TOTAL] = {};
+    inputElementDesc[IE_POSITION].SemanticName          = "POSITION";
+    inputElementDesc[IE_POSITION].Format                = DXGI_FORMAT_R32G32B32_FLOAT;
+    inputElementDesc[IE_POSITION].AlignedByteOffset     = 0;
+    inputElementDesc[IE_POSITION].InputSlotClass        = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+    inputElementDesc[IE_NORMAL].SemanticName            = "NORMAL";
+    inputElementDesc[IE_NORMAL].Format                  = DXGI_FORMAT_R32G32B32_FLOAT;
+    inputElementDesc[IE_NORMAL].AlignedByteOffset       = sizeof(float3);
+    inputElementDesc[IE_NORMAL].InputSlotClass          = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+    psoDesc.pRootSignature                     = pRootSignature.Get();
+    psoDesc.VS.pShaderBytecode                 = bytecodeVS.data();
+    psoDesc.VS.BytecodeLength                  = bytecodeVS.size();
+    psoDesc.PS.pShaderBytecode                 = bytecodePS.data();
+    psoDesc.PS.BytecodeLength                  = bytecodePS.size();
+    psoDesc.BlendState                         = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+    psoDesc.SampleMask                         = UINT_MAX;
+    psoDesc.RasterizerState                    = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+    psoDesc.RasterizerState.CullMode           = D3D12_CULL_MODE_NONE;
+    psoDesc.DepthStencilState                  = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+    psoDesc.DepthStencilState.DepthFunc        = D3D12_COMPARISON_FUNC_GREATER;
+    psoDesc.InputLayout.pInputElementDescs     = inputElementDesc;
+    psoDesc.InputLayout.NumElements            = IE_TOTAL;
+    psoDesc.PrimitiveTopologyType              = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    psoDesc.NumRenderTargets                   = 1;
+    psoDesc.RTVFormats[0]                      = DXGI_FORMAT_R8G8B8A8_UNORM;
+    psoDesc.DSVFormat                          = DXGI_FORMAT_D32_FLOAT;
+    psoDesc.SampleDesc.Count                   = 1;
+    psoDesc.SampleDesc.Quality                 = 0;
+    psoDesc.CachedPSO                          = {};
+    psoDesc.Flags                              = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+    ThrowIfFailed(pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pPipelineState)));
+
+    this->pPipelineState = std::move(pPipelineState);
+    this->pRootSignature = std::move(pRootSignature);
+}
+
+void MeshletPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeAS,
+                                   const std::vector<BYTE> &bytecodeMS,
+                                   const std::vector<BYTE> &bytecodePS)
 {
     PPipelineState pPipelineState;
     PRootSignature pRootSignature;
@@ -270,7 +327,7 @@ void MeshPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeAS,
     psoDesc.PrimitiveTopologyType                  = D3D12_PRIMITIVE_TOPOLOGY_TYPE_UNDEFINED;
     psoDesc.NumRenderTargets                       = 1;
     psoDesc.RTVFormats[0]                          = DXGI_FORMAT_R8G8B8A8_UNORM;
-    psoDesc.DSVFormat                              = DXGI_FORMAT_R32_FLOAT;
+    psoDesc.DSVFormat                              = DXGI_FORMAT_D32_FLOAT;
     psoDesc.SampleDesc.Count                       = 1;
     psoDesc.SampleDesc.Quality                     = 0;
     psoDesc.CachedPSO                              = {};
@@ -288,16 +345,16 @@ void MeshPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeAS,
     this->pRootSignature = std::move(pRootSignature);
 }
 
-void MeshPipeline::Load(const std::filesystem::path &pathMS, const std::filesystem::path &pathPS)
+void MeshletPipeline::Load(const std::filesystem::path &pathMS, const std::filesystem::path &pathPS)
 {
     std::vector<BYTE> dataMS = ReadFile(pathMS);
     std::vector<BYTE> dataPS = ReadFile(pathPS);
     LoadBytecode({}, dataMS, dataPS);
 }
 
-void MeshPipeline::Load(const std::filesystem::path &pathMS,
-                        const std::filesystem::path &pathPS,
-                        const std::filesystem::path &pathAS)
+void MeshletPipeline::Load(const std::filesystem::path &pathMS,
+                           const std::filesystem::path &pathPS,
+                           const std::filesystem::path &pathAS)
 {
     std::vector<BYTE> dataMS = ReadFile(pathMS);
     std::vector<BYTE> dataPS = ReadFile(pathPS);
@@ -340,7 +397,42 @@ static void QueryUploadVector(const std::vector<T> &data, PResource *outBuffer, 
     pCommandList->ResourceBarrier(1, &barrier);
 }
 
-void ModelGPU::Upload(const MeshletModelCPU &model)
+void MonoLodGPU::Upload(const MonoLodCPU &model)
+{
+    PResource pUploadVertices;
+    PResource pUploadIndices;
+
+    nIndices = model.Indices.size();
+
+    ThrowIfFailed(pCommandList->Reset(pCommandAllocator.Get(), nullptr));
+    QueryUploadVector(model.Vertices, &pVertices, &pUploadVertices);
+    QueryUploadVector(model.Indices, &pIndices, &pUploadIndices);
+    ThrowIfFailed(pCommandList->Close());
+    ExecuteCommandList();
+
+    PFence pFence;
+    ThrowIfFailed(pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&pFence)));
+    pCommandQueueDirect->Signal(pFence.Get(), 1);
+
+    if (pFence->GetCompletedValue() != 1)
+    {
+        RaiiHandle hEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (!hEvent.Get())
+            ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
+        pFence->SetEventOnCompletion(1, hEvent.Get());
+        WaitForSingleObjectEx(hEvent.Get(), INFINITE, FALSE);
+    }
+
+    mVertexBufferView.BufferLocation = pVertices->GetGPUVirtualAddress();
+    mVertexBufferView.SizeInBytes    = sizeof(Vertex) * model.Vertices.size();
+    mVertexBufferView.StrideInBytes  = sizeof(Vertex);
+
+    mIndexBufferView.BufferLocation = pIndices->GetGPUVirtualAddress();
+    mIndexBufferView.SizeInBytes    = sizeof(uint) * model.Indices.size();
+    mIndexBufferView.Format         = DXGI_FORMAT_R32_UINT;
+}
+
+void MeshletModelGPU::Upload(const MeshletModelCPU &model)
 {
     PResource pUploadVertices;
     PResource pUploadGlobalIndices;
@@ -381,7 +473,15 @@ void ModelGPU::Upload(const MeshletModelCPU &model)
     }
 }
 
-void ModelGPU::Render(int nInstances)
+void MonoLodGPU::Render(const MainConstantBuffer &MainCB, float3 InstanceOffset) const
+{
+    pCommandList->IASetIndexBuffer(&mIndexBufferView);
+    pCommandList->IASetVertexBuffers(0, 1, &mVertexBufferView);
+    pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    pCommandList->DrawIndexedInstanced(nIndices, 1, 0, 0, 0);
+}
+
+void MeshletModelGPU::Render(int nInstances)
 {
     for (uint iMesh = 0; iMesh < meshes.size(); ++iMesh)
     {

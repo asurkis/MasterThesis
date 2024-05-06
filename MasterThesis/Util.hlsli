@@ -3,7 +3,7 @@
 #define WAVE_SIZE 32
 #define GROUP_SIZE_AS WAVE_SIZE
 
-struct TCamera
+struct TMainCB
 {
     float4x4 MatView;
     float4x4 MatProj;
@@ -15,8 +15,8 @@ struct TCamera
 
 struct TVertex
 {
-    float3 Position;
-    float3 Normal;
+    float3 Position : POSITION;
+    float3 Normal : NORMAL;
 };
 
 struct TMeshlet
@@ -59,7 +59,7 @@ struct TPayload
     "SRV(t3),"                                                                                                         \
     "SRV(t4)"
 
-ConstantBuffer<TCamera> Camera : register(b0);
+ConstantBuffer<TMainCB> MainCB : register(b0);
 ConstantBuffer<TMesh> MeshInfo : register(b1);
 
 StructuredBuffer<TVertex> Vertices : register(t0);
