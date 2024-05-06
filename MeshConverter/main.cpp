@@ -1422,9 +1422,9 @@ int main()
     auto beforeLoadTS = std::chrono::steady_clock::now();
 
     std::cout << "Loading model...\n";
-    // mesh.LoadGLB("plane1.glb");
-    // mesh.LoadGLB("input.glb");
-    mesh.LoadGLB("model.glb");
+    // mesh.LoadGLB("../Assets/plane1.glb");
+    // mesh.LoadGLB("../Assets/input.glb");
+    mesh.LoadGLB("../Assets/model.glb");
     // mesh.MakePlane(64);
     // mesh.MakeSphere(64, 64);
     std::cout << "Loading model done\n";
@@ -1482,7 +1482,7 @@ int main()
     }
 
     std::cout << "Saving model...\n";
-    outModel.SaveToFile("../MasterThesis/model.bin");
+    outModel.SaveToFile("../Assets/model.bin");
     std::cout << "Saving model done\n";
 
     if constexpr (false)
