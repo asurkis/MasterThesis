@@ -340,7 +340,7 @@ static void QueryUploadVector(const std::vector<T> &data, PResource *outBuffer, 
     pCommandList->ResourceBarrier(1, &barrier);
 }
 
-void ModelGPU::Upload(const ModelCPU &model)
+void ModelGPU::Upload(const MeshletModelCPU &model)
 {
     PResource pUploadVertices;
     PResource pUploadGlobalIndices;

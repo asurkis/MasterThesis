@@ -63,6 +63,6 @@ class ModelGPU
   public:
     constexpr uint MaxLayer() const noexcept { return mMaxLayer; }
 
-    void Upload(const ModelCPU &model);
+    void Upload(const MeshletModelCPU &model);
     void Render(int nInstances);
 };

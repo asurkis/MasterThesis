@@ -1,29 +1,5 @@
 #pragma once
 
-static void AssertFn(bool cond, std::string_view text, int line)
-{
-    if (cond)
-        return;
-    std::ostringstream oss;
-    oss << text << " at line " << line;
-    throw std::runtime_error(oss.str());
-}
-
-template <typename L, typename R>
-static void AssertEqFn(const L &left, const R &right, std::string_view leftText, std::string_view rightText, int line)
-{
-    if (left == right)
-        return;
-    std::ostringstream oss;
-    oss << "Assertion failed:\n\tleft:  " << leftText << " = " << left << "\n\tright: " << rightText << " = " << right
-        << "\nat line " << line;
-    throw std::runtime_error(oss.str());
-}
-
-#define ASSERT_TEXT(cond, text) AssertFn(cond, text, __LINE__)
-#define ASSERT(cond) AssertFn(cond, "Assertion failed: " #cond, __LINE__)
-#define ASSERT_EQ(left, right) AssertEqFn(left, right, #left, #right, __LINE__)
-
 // T должен быть тривиальным, напр. int
 template <typename T, size_t CAPACITY> struct TrivialVector
 {

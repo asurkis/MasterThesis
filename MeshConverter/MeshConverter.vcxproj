@@ -144,7 +144,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="tiny_gltf.cc" />
   </ItemGroup>
   <ItemGroup>
     <None Include="input.glb" />

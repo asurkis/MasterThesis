@@ -85,7 +85,7 @@ void LoadAssets()
                                                        IID_PPV_ARGS(&pCameraGPU)));
     }
 
-    ModelCPU modelCpu;
+    MeshletModelCPU modelCpu;
     modelCpu.LoadFromFile("../Assets/model.bin");
     model.Upload(modelCpu);
 }

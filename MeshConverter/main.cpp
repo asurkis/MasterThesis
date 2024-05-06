@@ -636,111 +636,28 @@ struct IntermediateMesh
 
     void LoadGLB(const std::string &path)
     {
-        tinygltf::Model    inModel;
-        tinygltf::TinyGLTF tinyGltfCtx;
-        std::string        err;
-        std::string        warn;
-        bool               success = tinyGltfCtx.LoadBinaryFromFile(&inModel, &err, &warn, path);
-        if (!err.empty())
-            std::cerr << err << '\n';
-        if (!warn.empty())
-            std::cerr << warn << '\n';
-        ASSERT(success);
+        MonoModelCPU mono;
+        mono.LoadGLB(path);
 
-        ASSERT_EQ(inModel.meshes.size(), 1);
-        tinygltf::Mesh &mesh = inModel.meshes[0];
-
-        ASSERT_EQ(mesh.primitives.size(), 1);
-        tinygltf::Primitive &primitive = mesh.primitives[0];
-
-        ASSERT_EQ(primitive.mode, TINYGLTF_MODE_TRIANGLES);
-
-        int positionIdx = -1;
-        int normalIdx   = -1;
-        for (const auto &[name, idx] : primitive.attributes)
+        Vertices.clear();
+        Vertices.reserve(mono.Vertices.size());
+        for (const Vertex &vert : mono.Vertices)
         {
-            if (name == "POSITION")
-            {
-                ASSERT_EQ(positionIdx, -1);
-                positionIdx = idx;
-            }
-            else if (name == "NORMAL")
-            {
-                ASSERT_EQ(normalIdx, -1);
-                normalIdx = idx;
-            }
-        }
-        ASSERT(positionIdx != -1);
-        ASSERT(normalIdx != -1);
-
-        tinygltf::Accessor   &positionAccessor   = inModel.accessors[positionIdx];
-        tinygltf::BufferView &positionBufferView = inModel.bufferViews[positionAccessor.bufferView];
-        tinygltf::Buffer     &positionBuffer     = inModel.buffers[positionBufferView.buffer];
-
-        tinygltf::Accessor   &normalAccessor   = inModel.accessors[normalIdx];
-        tinygltf::BufferView &normalBufferView = inModel.bufferViews[normalAccessor.bufferView];
-        tinygltf::Buffer     &normalBuffer     = inModel.buffers[normalBufferView.buffer];
-
-        size_t positionStride = positionAccessor.ByteStride(positionBufferView);
-        size_t normalStride   = normalAccessor.ByteStride(normalBufferView);
-
-        if constexpr (false)
-            std::cout << "nPositions = " << positionAccessor.count << std::endl;
-        ASSERT_EQ(positionAccessor.type, TINYGLTF_TYPE_VEC3);
-        ASSERT_EQ(positionAccessor.componentType, TINYGLTF_COMPONENT_TYPE_FLOAT);
-        ASSERT_EQ(normalAccessor.type, TINYGLTF_TYPE_VEC3);
-        ASSERT_EQ(normalAccessor.componentType, TINYGLTF_COMPONENT_TYPE_FLOAT);
-
-        Vertices.reserve(positionAccessor.count);
-
-        for (size_t iVert = 0; iVert < positionAccessor.count; ++iVert)
-        {
-            size_t offPosition = positionBufferView.byteOffset;
-            offPosition += positionAccessor.byteOffset;
-            offPosition += positionStride * iVert;
-
-            size_t offNormal = normalBufferView.byteOffset;
-            offNormal += normalAccessor.byteOffset;
-            offNormal += normalStride * iVert;
-            unsigned char *pPosition = &positionBuffer.data[offPosition];
-            unsigned char *pNormal   = &normalBuffer.data[offNormal];
-
-            IntermediateVertex vert;
-            vert.m.Position = *reinterpret_cast<float3 *>(pPosition);
-            vert.m.Normal   = *reinterpret_cast<float3 *>(pNormal);
-            Vertices.push_back(vert);
+            IntermediateVertex interm;
+            interm.m = vert;
+            Vertices.push_back(interm);
         }
 
-        tinygltf::Accessor   &indexAccessor   = inModel.accessors[primitive.indices];
-        tinygltf::BufferView &indexBufferView = inModel.bufferViews[indexAccessor.bufferView];
-        tinygltf::Buffer     &indexBuffer     = inModel.buffers[indexBufferView.buffer];
-
-        unsigned char *indexBytes = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
-
-        int indexComponentSize = 0;
-        switch (indexAccessor.componentType)
-        {
-        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE: indexComponentSize = 1; break;
-        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT: indexComponentSize = 2; break;
-        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT: indexComponentSize = 4; break;
-        default: throw std::runtime_error("Unknown component type");
-        }
-
-        ASSERT_EQ(indexComponentSize, indexAccessor.ByteStride(indexBufferView));
-
-        size_t nTriangles = indexAccessor.count / 3;
+        size_t nTriangles = mono.Indices.size() / 3;
+        Triangles.clear();
         Triangles.reserve(nTriangles);
         for (size_t iTriangle = 0; iTriangle < nTriangles; ++iTriangle)
         {
             IntermediateTriangle tri;
             for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
             {
-                size_t idxOffset = indexComponentSize * (3 * iTriangle + iTriVert);
-                size_t iVert     = 0;
-                // little endian
-                for (int iByte = 0; iByte < indexComponentSize; ++iByte)
-                    iVert |= size_t(indexBytes[idxOffset + iByte]) << (8 * iByte);
-                tri.idx[iTriVert] = iVert;
+                size_t iiVert     = 3 * iTriangle + iTriVert;
+                tri.idx[iTriVert] = mono.Indices[iiVert];
             }
             Triangles.push_back(tri);
         }
@@ -1290,7 +1207,7 @@ struct IntermediateMesh
         }
     }
 
-    void ConvertModel(ModelCPU &outModel)
+    void ConvertModel(MeshletModelCPU &outModel)
     {
         size_t nMeshlets  = MeshletLayerOffsets[MeshletLayerOffsets.size() - 1];
         size_t nTriangles = Triangles.size();
@@ -1464,7 +1381,7 @@ int main()
         std::cout << "Partitioning layer " << i << " done\n";
     }
 
-    ModelCPU outModel;
+    MeshletModelCPU outModel;
 
     // std::cout << "Converting out model...\n";
     mesh.ConvertModel(outModel);
