@@ -344,17 +344,13 @@ struct IntermediateMeshlet
         }
         for (IntermediateTriangle &tri : Triangles)
         {
-            XMVECTOR p[3] = {};
-            for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
-                p[iTriVert] = XMLoadFloat3(&Vertices[tri.idx[iTriVert]].m.Position);
-            XMVECTOR norm = XMVector3Normalize(XMVector3Cross(p[1] - p[0], p[2] - p[0]));
             for (size_t iTriVert = 0; iTriVert < 3; ++iTriVert)
             {
                 IntermediateVertex &vert = Vertices[tri.idx[iTriVert]];
                 if (vert.IsBorder)
                     continue;
                 XMVECTOR acc = XMLoadFloat3(&vert.m.Normal);
-                XMStoreFloat3(&vert.m.Normal, acc + norm);
+                XMStoreFloat3(&vert.m.Normal, acc + tri.Normal);
             }
         }
         for (size_t iVert = 0; iVert < Vertices.size(); ++iVert)
@@ -420,7 +416,7 @@ struct IntermediateMeshlet
         {
             out = p1;
             return err1;
-    }
+        }
         else
         {
             out = p2;
@@ -432,7 +428,7 @@ struct IntermediateMeshlet
     {
         v          = XMVectorSetW(v, 1.0f);
         XMVECTOR u = XMVector3Transform(v, q);
-        return XMVectorGetX(XMVector4Dot(v, u));
+        return fabs(XMVectorGetX(XMVector4Dot(v, u)));
     }
 
     void GatherTriangles(size_t iNewVert, size_t iVert, size_t &nDeletedTriangles, const std::vector<bool> &deleted)
@@ -1423,6 +1419,8 @@ int main()
     return 0;
 #endif
 
+    auto beforeLoadTS = std::chrono::steady_clock::now();
+
     std::cout << "Loading model...\n";
     // mesh.LoadGLB("plane1.glb");
     // mesh.LoadGLB("input.glb");
@@ -1430,6 +1428,8 @@ int main()
     // mesh.MakePlane(64);
     // mesh.MakeSphere(64, 64);
     std::cout << "Loading model done\n";
+
+    auto afterLoadTS = std::chrono::steady_clock::now();
 
     size_t nVertices  = mesh.Vertices.size();
     size_t nTriangles = mesh.Triangles.size();
@@ -1547,6 +1547,14 @@ int main()
             }
         }
     }
+
+    auto finalTS = std::chrono::steady_clock::now();
+
+    std::chrono::duration<double> fullDuration{finalTS - beforeLoadTS};
+    std::chrono::duration<double> cvtDuration{finalTS - afterLoadTS};
+
+    std::cout << "Full duration        : " << fullDuration.count() / 60.0 << " minutes\n"
+              << "Of them convertation : " << cvtDuration.count() / 60.0f << " minutes\n";
 
     return 0;
 }

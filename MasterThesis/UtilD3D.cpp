@@ -264,7 +264,7 @@ void MeshPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeAS,
     psoDesc.SampleMask                             = UINT_MAX;
     psoDesc.RasterizerState                        = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     psoDesc.RasterizerState.FillMode               = D3D12_FILL_MODE_SOLID;
-    psoDesc.RasterizerState.CullMode               = D3D12_CULL_MODE_NONE;
+    psoDesc.RasterizerState.CullMode               = D3D12_CULL_MODE_FRONT;
     psoDesc.DepthStencilState                      = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
     psoDesc.DepthStencilState.DepthFunc            = D3D12_COMPARISON_FUNC_GREATER;
     psoDesc.PrimitiveTopologyType                  = D3D12_PRIMITIVE_TOPOLOGY_TYPE_UNDEFINED;
@@ -381,7 +381,7 @@ void ModelGPU::Upload(const ModelCPU &model)
     }
 }
 
-void ModelGPU::Render()
+void ModelGPU::Render(int nInstances)
 {
     for (uint iMesh = 0; iMesh < meshes.size(); ++iMesh)
     {
@@ -397,6 +397,6 @@ void ModelGPU::Render()
         constexpr uint GROUP_SIZE_AS = 32;
 
         uint nDispatch = (mesh.MeshletCount + GROUP_SIZE_AS - 1) / GROUP_SIZE_AS;
-        pCommandList->DispatchMesh(nDispatch, 1, 1);
+        pCommandList->DispatchMesh(nDispatch, nInstances, 1);
     }
 }

@@ -33,8 +33,11 @@ float    camRotY   = XMConvertToRadians(0.0f);
 float    camSpeed  = 10.0f;
 float    camOffset = 3.0f;
 
-float meshletThreshold = 0.25f;
-int   displayType      = -1;
+float errorThreshold = 0.25f;
+int   displayType    = -1;
+
+float3 instanceOffset = float3(10.0f, 10.0f, 10.0f);
+int    nInstances     = 1;
 
 bool drawModel       = true;
 bool drawMeshletAABB = false;
@@ -45,6 +48,8 @@ struct Camera
     float4x4 MatProj;
     float4x4 MatViewProj;
     float4x4 MatNormal;
+    float4   FloatInfo; // xyz = InstanceOffset, w = ErrorThreshold
+    uint4    IntInfo;   // x = DisplayType
 };
 
 Camera    CameraCB;
@@ -163,17 +168,17 @@ void FillCommandList()
     pCommandList->SetGraphicsRootConstantBufferView(0, pCameraGPU->GetGPUVirtualAddress());
     if (drawModel)
     {
-        pCommandList->SetGraphicsRoot32BitConstant(1, 1e6f * meshletThreshold, 2);
+        pCommandList->SetGraphicsRoot32BitConstant(1, *reinterpret_cast<uint *>(&errorThreshold), 2);
         pCommandList->SetGraphicsRoot32BitConstant(1, displayType < 0 ? UINT32_MAX : displayType, 3);
-        model.Render();
+        model.Render(nInstances);
     }
 
     if (drawMeshletAABB)
     {
         pCommandList->SetPipelineState(aabbPipeline.GetStateRaw());
-        pCommandList->SetGraphicsRoot32BitConstant(1, 1e6f * meshletThreshold, 2);
+        pCommandList->SetGraphicsRoot32BitConstant(1, *reinterpret_cast<uint *>(&errorThreshold), 2);
         pCommandList->SetGraphicsRoot32BitConstant(1, displayType < 0 ? UINT32_MAX : displayType, 3);
-        model.Render();
+        model.Render(nInstances);
     }
 
     ImGui::Render();
@@ -210,8 +215,12 @@ void OnRender()
     }
     ImGui::Checkbox("Draw model", &drawModel);
     ImGui::Checkbox("Draw meshlet AABB", &drawMeshletAABB);
-    ImGui::SliderFloat("Meshlet threshold", &meshletThreshold, 0.1f, 2.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+    ImGui::SliderFloat("Error threshold", &errorThreshold, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::SliderInt("Meshlet layer", &displayType, -1, 3 * model.MaxLayer() + 1);
+    ImGui::SliderInt("Object count", &nInstances, 1, 512);
+    ImGui::SliderFloat("Object Offset X", &instanceOffset.x, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+    ImGui::SliderFloat("Object Offset Y", &instanceOffset.y, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+    ImGui::SliderFloat("Object Offset Z", &instanceOffset.z, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::End();
 
     float aspect    = float(WindowWidth) / float(WindowHeight);
@@ -221,8 +230,8 @@ void OnRender()
     {
         ImVec2 mouseDelta = ImGui::GetMouseDragDelta(0, 0.0f);
         ImGui::ResetMouseDragDelta();
-        camRotX -= camOffset * mouseDelta.y / float(WindowHeight);
-        camRotY -= camOffset * mouseDelta.x / float(WindowHeight);
+        camRotX -= mouseDelta.y / float(WindowHeight);
+        camRotY -= mouseDelta.x / float(WindowHeight);
         camRotX = std::clamp(camRotX, 0.001f - XM_PIDIV2, XM_PIDIV2 - 0.001f);
 
         while (camRotY < -XM_PI)
@@ -280,11 +289,13 @@ void OnRender()
     XMMATRIX matTrans = XMMatrixTranslationFromVector(camOffset * vecForward - camFocus);
 
     CameraCB.MatView     = XMMatrixTranspose(matTrans * matRot);
-    CameraCB.MatProj     = XMMatrixTranspose(XMMatrixPerspectiveFovRH(45.0f, aspect, 1000.0f, 0.001f));
+    CameraCB.MatProj     = XMMatrixTranspose(XMMatrixPerspectiveFovRH(45.0f, aspect, 1000000.0f, 0.001f));
     CameraCB.MatViewProj = CameraCB.MatProj * CameraCB.MatView;
     CameraCB.MatNormal   = XMMatrixTranspose(XMMatrixInverse(nullptr, CameraCB.MatView));
+    CameraCB.FloatInfo   = XMVectorSet(instanceOffset.x, instanceOffset.y, instanceOffset.z, errorThreshold);
+    CameraCB.IntInfo     = XMVectorSetInt(displayType < 0 ? UINT32_MAX : displayType, 0, 0, 0);
 
-    void         *pCameraDataBegin;
+    void         *pCameraDataBegin = nullptr;
     CD3DX12_RANGE readRange(0, 0);
     ThrowIfFailed(pCameraGPU->Map(0, &readRange, &pCameraDataBegin));
     memcpy(pCameraDataBegin, &CameraCB, sizeof(CameraCB));

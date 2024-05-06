@@ -75,24 +75,30 @@ void ModelCPU::LoadFromFile(const std::filesystem::path &path)
         const MeshletDesc &meshlet = Meshlets[iMeshlet];
         const BoundingBox &aabb    = MeshletBoxes[iMeshlet];
         // Восстанавливаем AABB родителей
+        float maxParentError = 0.0f;
         for (uint iiParent = 0; iiParent < meshlet.ParentCount; ++iiParent)
         {
             uint iParent = meshlet.ParentOffset + iiParent;
-            if (iParent != 0)
-            {
-                if (iParent <= iMeshlet || iParent >= Meshlets.size())
-                    throw std::runtime_error("Incorrect Parent1");
-                BoundingBox &aabbParent = MeshletBoxes[iParent];
+            if (iParent <= iMeshlet || iParent >= Meshlets.size())
+                throw std::runtime_error("Incorrect Parent1");
+            BoundingBox &aabbParent = MeshletBoxes[iParent];
 
-                aabbParent.Min.x = XMMin(aabbParent.Min.x, aabb.Min.x);
-                aabbParent.Min.y = XMMin(aabbParent.Min.y, aabb.Min.y);
-                aabbParent.Min.z = XMMin(aabbParent.Min.z, aabb.Min.z);
-                aabbParent.Max.x = XMMax(aabbParent.Max.x, aabb.Max.x);
-                aabbParent.Max.y = XMMax(aabbParent.Max.y, aabb.Max.y);
-                aabbParent.Max.z = XMMax(aabbParent.Max.z, aabb.Max.z);
+            aabbParent.Min.x = XMMin(aabbParent.Min.x, aabb.Min.x);
+            aabbParent.Min.y = XMMin(aabbParent.Min.y, aabb.Min.y);
+            aabbParent.Min.z = XMMin(aabbParent.Min.z, aabb.Min.z);
+            aabbParent.Max.x = XMMax(aabbParent.Max.x, aabb.Max.x);
+            aabbParent.Max.y = XMMax(aabbParent.Max.y, aabb.Max.y);
+            aabbParent.Max.z = XMMax(aabbParent.Max.z, aabb.Max.z);
 
-                Meshlets[iParent].Height = std::max(Meshlets[iParent].Height, meshlet.Height + 1);
-            }
+            Meshlets[iParent].Height = std::max(Meshlets[iParent].Height, meshlet.Height + 1);
+            maxParentError           = std::max(maxParentError, Meshlets[iParent].Error);
+        }
+
+        maxParentError += meshlet.Error;
+        for (uint iiParent = 0; iiParent < meshlet.ParentCount; ++iiParent)
+        {
+            uint iParent            = meshlet.ParentOffset + iiParent;
+            Meshlets[iParent].Error = maxParentError;
         }
     }
 }
