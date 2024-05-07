@@ -46,7 +46,7 @@ struct TMesh
 
 struct TPayload
 {
-    float4x4 MatTransform;
+    float4 Position;
     float4 AdditionalInfo[GROUP_SIZE_AS];
     uint MeshletIndex[GROUP_SIZE_AS];
 };

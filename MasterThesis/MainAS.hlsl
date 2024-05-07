@@ -1,6 +1,8 @@
 #include "Util.hlsli"
 
-bool IsCulled(float4x4 MatFull, TBoundingBox box)
+groupshared float3 MeshPosition;
+
+bool IsCulled(TBoundingBox box)
 {
     uint i;
     
@@ -15,7 +17,7 @@ bool IsCulled(float4x4 MatFull, TBoundingBox box)
         ogPos.y = i & 2 ? box.Max.y : box.Min.y;
         ogPos.z = i & 4 ? box.Max.z : box.Min.z;
         
-        float4 hs = mul(float4(ogPos, 1), MatFull);
+        float4 hs = mul(float4(ogPos + MeshPosition, 1), MainCB.MatViewProj);
         culledByPlane[0] &= hs.w <= 0;
         culledByPlane[1] &= hs.z > hs.w;
         culledByPlane[2] &= hs.x < -hs.w;
@@ -33,11 +35,11 @@ bool IsCulled(float4x4 MatFull, TBoundingBox box)
     return false;
 }
 
-bool IsEnough(float4x4 MatFull, float err, TBoundingBox box, out float VisibleRadius)
+bool IsEnough(float err, TBoundingBox box, out float VisibleRadius)
 {
-    float3 center = 0.5 * (box.Min + box.Max);
+    float3 center = 0.5 * (box.Min + box.Max) + MeshPosition;
     float diameter = length(box.Max - box.Min);
-    float4 hs = mul(float4(center, 1), MatFull);
+    float4 hs = mul(float4(center, 1), MainCB.MatViewProj);
     if (hs.w <= 0)
         return true;
     float r = diameter / hs.w;
@@ -46,7 +48,7 @@ bool IsEnough(float4x4 MatFull, float err, TBoundingBox box, out float VisibleRa
     return r < MainCB.FloatInfo.w;
 }
 
-bool ShouldDisplay(float4x4 MatFull, uint iMeshlet, out float VisibleRadius)
+bool ShouldDisplay(uint iMeshlet, out float VisibleRadius)
 {
     if (iMeshlet >= MeshInfo.MeshletCount)
         return false;
@@ -55,7 +57,7 @@ bool ShouldDisplay(float4x4 MatFull, uint iMeshlet, out float VisibleRadius)
     TBoundingBox box = MeshletBoxes[iMeshlet];
     if (MainCB.IntInfo.z != 0xFFFFFFFF)
     {
-        IsEnough(MatFull, meshlet.Error, box, VisibleRadius);
+        IsEnough(meshlet.Error, box, VisibleRadius);
         return meshlet.Height == MainCB.IntInfo.z / 3;
     }
     
@@ -67,16 +69,16 @@ bool ShouldDisplay(float4x4 MatFull, uint iMeshlet, out float VisibleRadius)
     {
         TMeshlet parent = Meshlets[iParent];
         TBoundingBox parentBox = MeshletBoxes[iParent];
-        if (IsCulled(MatFull, parentBox))
+        if (IsCulled(parentBox))
             return false;
         float blank;
-        if (IsEnough(MatFull, parent.Error, parentBox, blank))
+        if (IsEnough(parent.Error, parentBox, blank))
             return false;
     }
     
-    if (IsCulled(MatFull, box))
+    if (IsCulled(box))
         return false;
-    return isLeaf || IsEnough(MatFull, meshlet.Error, box, VisibleRadius);
+    return isLeaf || IsEnough(meshlet.Error, box, VisibleRadius);
 }
 
 [numthreads(GROUP_SIZE_AS, 1, 1)]
@@ -87,26 +89,20 @@ void main(
 {
     uint iInstance = dtid.y;
     uint iMeshlet = MeshInfo.MeshletOffset + dtid.x;
-    uint3 iOff = uint3(
+    uint3 iPos = uint3(
         GetZCodeComponent3(iInstance >> 0),
         GetZCodeComponent3(iInstance >> 1),
         GetZCodeComponent3(iInstance >> 2));
-    float3 off = iOff * MainCB.FloatInfo.xyz;
-    float4x4 MatTranslate = float4x4(
-        float4(1.0f, 0.0f, 0.0f, 0.0f),
-        float4(0.0f, 1.0f, 0.0f, 0.0f),
-        float4(0.0f, 0.0f, 1.0f, 0.0f),
-        float4(off, 1.0f)
-    );
-    float4x4 MatFull = mul(MatTranslate, MainCB.MatViewProj);
+    float3 pos = iPos * MainCB.FloatInfo.xyz;
+    MeshPosition = pos;
     float VisibleRadius = 0.0f;
-    bool shouldDisplay = ShouldDisplay(MatFull, iMeshlet, VisibleRadius);
+    bool shouldDisplay = ShouldDisplay(iMeshlet, VisibleRadius);
     
     uint current = WavePrefixCountBits(shouldDisplay);
     uint nDispatch = WaveActiveCountBits(shouldDisplay);
 
     TPayload p;
-    p.MatTransform = MatTranslate;
+    p.Position = float4(pos, 1);
     if (shouldDisplay)
     {
         p.MeshletIndex[current] = iMeshlet;

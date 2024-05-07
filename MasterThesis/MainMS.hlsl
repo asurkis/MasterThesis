@@ -2,15 +2,7 @@
 
 #define GROUP_SIZE 128
 
-struct TMeshletExpanded
-{
-    float4x4 MatTransView;
-    float4x4 MatTransViewProj;
-    float4x4 MatTransNormal;
-    float4 AdditionalInfo;
-    uint iMeshlet;
-    TMeshlet m;
-};
+groupshared TMeshlet Meshlet;
 
 uint3 UnpackPrimitive(uint primitive)
 {
@@ -18,29 +10,29 @@ uint3 UnpackPrimitive(uint primitive)
     return uint3(primitive & 0x3FF, (primitive >> 10) & 0x3FF, (primitive >> 20) & 0x3FF);
 }
 
-uint3 GetPrimitive(TMeshlet m, uint index)
+uint3 GetPrimitive(uint index)
 {
-    uint prim = Primitives[m.PrimOffset + index];
+    uint prim = Primitives[Meshlet.PrimOffset + index];
     return UnpackPrimitive(prim);
 }
 
-uint GetVertexIndex(TMeshlet m, uint localIndex)
+uint GetVertexIndex(uint localIndex)
 {
-    return GlobalIndices[m.VertOffset + localIndex];
+    return GlobalIndices[Meshlet.VertOffset + localIndex];
 }
 
-TVertexOut GetVertexAttributes(TMeshletExpanded e, uint iLocVert)
+TVertexOut GetVertexAttributes(float3 pos, uint iLocVert)
 {
-    uint iParent = e.m.ParentOffset;
-    uint iVert = GetVertexIndex(e.m, iLocVert);
+    uint iParent = Meshlet.ParentOffset;
+    uint iVert = GetVertexIndex(iLocVert);
     bool isBorder = (iVert & 0x80000000) != 0;
     iVert &= 0x7FFFFFFF;
     TVertex v = Vertices[iVert];
 
     TVertexOut vout;
-    vout.PositionVS = mul(float4(v.Position, 1), e.MatTransView).xyz;
-    vout.PositionHS = mul(float4(v.Position, 1), e.MatTransViewProj);
-    vout.Normal = mul(float4(v.Normal, 0), e.MatTransNormal).xyz;
+    vout.PositionVS = mul(float4(v.Position + pos, 1), MainCB.MatView).xyz;
+    vout.PositionHS = mul(float4(v.Position + pos, 1), MainCB.MatViewProj);
+    vout.Normal = mul(float4(v.Normal, 0), MainCB.MatNormal).xyz;
     
     /*
     if (MeshInfo.DisplayType == 0xFFFFFFFF)
@@ -82,28 +74,21 @@ void main(
     out indices uint3 tris[128],
     out vertices TVertexOut verts[256])
 {
-    float4x4 MatTransform = Payload.MatTransform;
-    TMeshletExpanded e;
-    e.MatTransView = mul(MatTransform, MainCB.MatView);
-    e.MatTransViewProj = mul(MatTransform, MainCB.MatViewProj);
-    e.MatTransNormal = mul(MatTransform, MainCB.MatNormal);
-    e.AdditionalInfo = Payload.AdditionalInfo[gid];
+    uint iMeshlet = Payload.MeshletIndex[gid];
+    Meshlet = Meshlets[iMeshlet];
+    SetMeshOutputCounts(Meshlet.VertCount, Meshlet.PrimCount);
 
-    e.iMeshlet = Payload.MeshletIndex[gid];
-    e.m = Meshlets[e.iMeshlet];
-    SetMeshOutputCounts(e.m.VertCount, e.m.PrimCount);
-
-    if (gtid < e.m.PrimCount)
-        tris[gtid] = GetPrimitive(e.m, gtid);
+    if (gtid < Meshlet.PrimCount)
+        tris[gtid] = GetPrimitive(gtid);
 
     uint iLocVert;
     
     // Повторим код 2 раза, чтобы не было менее предсказуемого цикла
     iLocVert = gtid;
-    if (iLocVert < e.m.VertCount)
-        verts[iLocVert] = GetVertexAttributes(e, iLocVert);
+    if (iLocVert < Meshlet.VertCount)
+        verts[iLocVert] = GetVertexAttributes(Payload.Position.xyz, iLocVert);
     
     iLocVert = gtid + 128;
-    if (iLocVert < e.m.VertCount)
-        verts[iLocVert] = GetVertexAttributes(e, iLocVert);
+    if (iLocVert < Meshlet.VertCount)
+        verts[iLocVert] = GetVertexAttributes(Payload.Position.xyz, iLocVert);
 }

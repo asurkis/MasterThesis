@@ -27,11 +27,6 @@ void main(
     out indices uint2 lines[12],
     out vertices TVertexOut verts[8])
 {
-    float4x4 MatTransform = Payload.MatTransform;
-    float4x4 MatTransView = mul(MatTransform, MainCB.MatView);
-    float4x4 MatTransViewProj = mul(MatTransform, MainCB.MatViewProj);
-    float4x4 MatTransNormal = mul(MatTransform, MainCB.MatNormal);
-
     uint iMeshlet = Payload.MeshletIndex[gid];
     TMeshlet m = Meshlets[iMeshlet];
     TBoundingBox box = MeshletBoxes[iMeshlet];
@@ -44,10 +39,11 @@ void main(
         ogPos.x = gtid & 1 ? box.Max.x : box.Min.x;
         ogPos.y = gtid & 2 ? box.Max.y : box.Min.y;
         ogPos.z = gtid & 4 ? box.Max.z : box.Min.z;
+        ogPos += Payload.Position.xyz;
 
         TVertexOut vout;
-        vout.PositionVS = mul(float4(ogPos, 1), MatTransView).xyz;
-        vout.PositionHS = mul(float4(ogPos, 1), MatTransViewProj);
+        vout.PositionVS = mul(float4(ogPos, 1), MainCB.MatView).xyz;
+        vout.PositionHS = mul(float4(ogPos, 1), MainCB.MatViewProj);
         vout.MeshletIndex = iMeshlet;
         verts[gtid] = vout;
     }

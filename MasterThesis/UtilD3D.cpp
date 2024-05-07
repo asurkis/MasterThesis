@@ -567,6 +567,21 @@ void TMonoModelGPU::Commit()
         size_t lodN   = lodEnd - lodBeg;
         mLods[iLod].Render(lodN, lodBeg);
     }
+
+    /*
+    void         *pInstanceDataBegin = nullptr;
+    CD3DX12_RANGE readRange(0, 0);
+    ThrowIfFailed(pInstanceBuffer->Map(0, &readRange, &pInstanceDataBegin));
+    memcpy(pInstanceDataBegin, mInstances.data(), sizeof(float3) * mNInstances);
+    pInstanceBuffer->Unmap(0, nullptr);
+
+    pCommandList->IASetVertexBuffers(1, 1, &mInstanceBufferView);
+    for (size_t iInstance = 0; iInstance < mNInstances; ++iInstance)
+    {
+        size_t iLod = mPickedLods[iInstance];
+        mLods[iLod].Render(1, iInstance);
+    }
+    */
 }
 
 void TMeshletModelGPU::Upload(const TMeshletModelCPU &model)
