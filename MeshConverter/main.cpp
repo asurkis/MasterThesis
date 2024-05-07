@@ -38,7 +38,7 @@ template <> struct std::hash<MeshEdge>
 
 struct IntermediateVertex
 {
-    Vertex   m             = {};
+    TVertex   m             = {};
     XMMATRIX Quadric       = XMMatrixIdentity();
     size_t   OtherIndex    = 0;
     size_t   TriangleCount = 0;
@@ -636,12 +636,12 @@ struct IntermediateMesh
 
     void LoadGLB(const std::string &path)
     {
-        MonoLodCPU mono;
+        TMonoLodCPU mono;
         mono.LoadGLB(path);
 
         Vertices.clear();
         Vertices.reserve(mono.Vertices.size());
-        for (const Vertex &vert : mono.Vertices)
+        for (const TVertex &vert : mono.Vertices)
         {
             IntermediateVertex interm;
             interm.m = vert;
@@ -1207,7 +1207,7 @@ struct IntermediateMesh
         }
     }
 
-    void ConvertModel(MeshletModelCPU &outModel)
+    void ConvertModel(TMeshletModelCPU &outModel)
     {
         size_t nMeshlets  = MeshletLayerOffsets[MeshletLayerOffsets.size() - 1];
         size_t nTriangles = Triangles.size();
@@ -1223,7 +1223,7 @@ struct IntermediateMesh
                     Vertices[iVert].Visited = false;
             }
 
-            MeshletDesc meshlet  = {};
+            TMeshletDesc meshlet  = {};
             meshlet.VertOffset   = outModel.GlobalIndices.size();
             meshlet.VertCount    = 0;
             meshlet.PrimOffset   = MeshletTriangles.Split(iMeshlet);
@@ -1281,7 +1281,7 @@ struct IntermediateMesh
             outModel.Meshlets.push_back(meshlet);
         }
 
-        MeshDesc outMesh               = {};
+        TMeshDesc outMesh               = {};
         outMesh.MeshletCount           = nMeshlets;
         outMesh.MeshletTriangleOffsets = 0;
         outModel.Meshes.push_back(outMesh);
@@ -1381,7 +1381,7 @@ int main()
         std::cout << "Partitioning layer " << i << " done\n";
     }
 
-    MeshletModelCPU outModel;
+    TMeshletModelCPU outModel;
 
     // std::cout << "Converting out model...\n";
     mesh.ConvertModel(outModel);
@@ -1436,7 +1436,7 @@ int main()
         std::cout << "\nMeshlets:\n";
         for (size_t iMeshlet = 0; iMeshlet < outModel.Meshlets.size(); ++iMeshlet)
         {
-            MeshletDesc &meshlet = outModel.Meshlets[iMeshlet];
+            TMeshletDesc &meshlet = outModel.Meshlets[iMeshlet];
             std::cout << "M[" << iMeshlet << "] = { VertOffset: " << meshlet.VertOffset
                       << ", VertCount: " << meshlet.VertCount << ", PrimOffset: " << meshlet.PrimOffset
                       << ", PrimCount: " << meshlet.PrimCount << "}\n";
@@ -1446,7 +1446,7 @@ int main()
         for (size_t iMeshlet = 0; iMeshlet < outModel.Meshlets.size(); ++iMeshlet)
         {
             std::cout << "M[" << iMeshlet << "]:\n";
-            MeshletDesc &meshlet = outModel.Meshlets[iMeshlet];
+            TMeshletDesc &meshlet = outModel.Meshlets[iMeshlet];
             for (uint iMeshletTriangle = 0; iMeshletTriangle < meshlet.PrimCount; ++iMeshletTriangle)
             {
                 uint iTriangle = meshlet.PrimOffset + iMeshletTriangle;

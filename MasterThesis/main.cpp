@@ -1,6 +1,5 @@
 #include "stdafx.h"
 
-#include "Model.h"
 #include "UtilD3D.h"
 #include "UtilWin32.h"
 #include <DirectXMath.h>
@@ -22,16 +21,12 @@ PDescriptorHeap pSrvHeap;
 UINT            srvDescSize;
 
 #ifdef USE_MONO_LODS
-MonoPipeline mainPipeline;
-#else
-MeshletPipeline mainPipeline;
-MeshletPipeline aabbPipeline;
-#endif
+TMonoPipeline mainPipeline;
 
-// XMVECTOR camPos   = XMVectorSet(-100.0f, 80.0f, 150.0f, 0.0f);
-// float    camRotX  = XMConvertToRadians(0.0f);
-// float    camRotY  = XMConvertToRadians(135.0f);
-// float    camSpeed = 50.0f;
+#else
+TMeshletPipeline mainPipeline;
+TMeshletPipeline aabbPipeline;
+#endif
 
 XMVECTOR camFocus  = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
 float    camRotX   = XMConvertToRadians(0.0f);
@@ -50,13 +45,14 @@ bool drawModel       = true;
 bool drawMeshletAABB = false;
 #endif
 
-MainConstantBuffer MainCB;
-PResource          pCameraGPU;
+PResource pMainCB;
+
+constexpr size_t MAX_NUM_INSTANCES = 512;
 
 #ifdef USE_MONO_LODS
-std::vector<MonoLodGPU> lods;
+TMonoModelGPU model;
 #else
-MeshletModelGPU model;
+TMeshletModelGPU model;
 #endif
 
 static void LoadAssets()
@@ -80,38 +76,29 @@ static void LoadAssets()
 #endif
 
     {
-        UINT                    camBufSize = sizeof(MainCB);
         CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_UPLOAD);
-        auto                    desc = CD3DX12_RESOURCE_DESC::Buffer(camBufSize);
+        auto                    desc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(MainData));
         ThrowIfFailed(pDevice->CreateCommittedResource(&heapProps,
                                                        D3D12_HEAP_FLAG_NONE,
                                                        &desc,
                                                        D3D12_RESOURCE_STATE_GENERIC_READ,
                                                        nullptr,
-                                                       IID_PPV_ARGS(&pCameraGPU)));
+                                                       IID_PPV_ARGS(&pMainCB)));
     }
 
 #ifdef USE_MONO_LODS
-    lods.resize(1);
-    for (size_t iLod = 0; iLod < lods.size(); ++iLod)
-    {
-        std::ostringstream lodPath;
-        lodPath << "../Assets/Statue_LOD" << iLod + 2 << ".glb";
-        MonoLodCPU modelCpu;
-        modelCpu.LoadGLB(lodPath.str());
-        lods[iLod].Upload(modelCpu);
-    }
+    model.LoadGLBs("../Assets/Statue", 1, MAX_NUM_INSTANCES);
 #else
-    MeshletModelCPU modelCpu;
-    modelCpu.LoadFromFile("../Assets/model.bin");
-    model.Upload(modelCpu);
+    TMeshletModelCPU modelCPU;
+    modelCPU.LoadFromFile("../Assets/model.bin");
+    model.Upload(modelCPU);
 #endif
 }
 
-class RaiiImgui
+class TRaiiImgui
 {
   public:
-    RaiiImgui()
+    TRaiiImgui()
     {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
@@ -134,7 +121,7 @@ class RaiiImgui
                             gpuHandle);
     }
 
-    ~RaiiImgui()
+    ~TRaiiImgui()
     {
         ImGui_ImplDX12_Shutdown();
         ImGui_ImplWin32_Shutdown();
@@ -142,7 +129,17 @@ class RaiiImgui
     }
 };
 
-std::optional<RaiiImgui> raiiImgui;
+std::optional<TRaiiImgui> raiiImgui;
+
+static uint GetZCodeComponent3(uint x)
+{
+    x = x & 0x49249249;
+    x = (x ^ (x >> 2)) & 0xC30C30C3;
+    x = (x ^ (x >> 4)) & 0x0F00F00F;
+    x = (x ^ (x >> 8)) & 0xFF0000FF;
+    x = (x ^ (x >> 16)) & 0x00000FFF;
+    return x;
+}
 
 static void FillCommandList()
 {
@@ -183,9 +180,19 @@ static void FillCommandList()
     pCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 0.0f, 0, 0, nullptr);
 
     pCommandList->SetGraphicsRootSignature(mainPipeline.GetRootSignatureRaw());
-    pCommandList->SetGraphicsRootConstantBufferView(0, pCameraGPU->GetGPUVirtualAddress());
+    pCommandList->SetGraphicsRootConstantBufferView(0, pMainCB->GetGPUVirtualAddress());
 #ifdef USE_MONO_LODS
-    lods[0].Render(MainCB, float3(0.0f, 0.0f, 0.0f));
+    model.Reset();
+    for (int i = 0; i < nInstances; ++i)
+    {
+        uint ix = GetZCodeComponent3(i >> 0);
+        uint iy = GetZCodeComponent3(i >> 1);
+        uint iz = GetZCodeComponent3(i >> 2);
+        model.Instance(float3(ix * instanceOffset.x, iy * instanceOffset.y, iz * instanceOffset.z));
+    }
+    model.Commit();
+
+    // model.mLods[0].Render();
 #else
     if (drawModel)
     {
@@ -210,7 +217,7 @@ static void FillCommandList()
     ThrowIfFailed(pCommandList->Close());
 }
 
-void OnRender()
+static void OnRender()
 {
     WaitForLastFrame();
 
@@ -232,14 +239,14 @@ void OnRender()
         ImGui::Text("Rotation Y: %.1f deg", XMConvertToDegrees(camRotY));
     }
 #ifdef USE_MONO_LODS
-    ImGui::SliderInt("LOD", &displayType, -1, lods.size());
+    ImGui::SliderInt("LOD", &displayType, -1, model.mLods.size());
 #else
     ImGui::Checkbox("Draw model", &drawModel);
     ImGui::Checkbox("Draw meshlet AABB", &drawMeshletAABB);
     ImGui::SliderInt("Meshlet layer", &displayType, -1, 3 * model.MaxLayer() + 1);
 #endif
     ImGui::SliderFloat("Error threshold", &errorThreshold, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-    ImGui::SliderInt("Object count", &nInstances, 1, 512);
+    ImGui::SliderInt("Object count", &nInstances, 1, MAX_NUM_INSTANCES);
     ImGui::SliderFloat("Object Offset X", &instanceOffset.x, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::SliderFloat("Object Offset Y", &instanceOffset.y, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
     ImGui::SliderFloat("Object Offset Z", &instanceOffset.z, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
@@ -252,8 +259,8 @@ void OnRender()
     {
         ImVec2 mouseDelta = ImGui::GetMouseDragDelta(0, 0.0f);
         ImGui::ResetMouseDragDelta();
-        camRotX -= mouseDelta.y / float(WindowHeight);
-        camRotY -= mouseDelta.x / float(WindowHeight);
+        camRotX -= 4.0f * mouseDelta.y / float(WindowHeight);
+        camRotY -= 4.0f * mouseDelta.x / float(WindowHeight);
         camRotX = std::clamp(camRotX, 0.001f - XM_PIDIV2, XM_PIDIV2 - 0.001f);
 
         while (camRotY < -XM_PI)
@@ -310,18 +317,18 @@ void OnRender()
 
     XMMATRIX matTrans = XMMatrixTranslationFromVector(camOffset * vecForward - camFocus);
 
-    MainCB.MatView     = XMMatrixTranspose(matTrans * matRot);
-    MainCB.MatProj     = XMMatrixTranspose(XMMatrixPerspectiveFovRH(45.0f, aspect, 1000000.0f, 0.001f));
-    MainCB.MatViewProj = MainCB.MatProj * MainCB.MatView;
-    MainCB.MatNormal   = XMMatrixTranspose(XMMatrixInverse(nullptr, MainCB.MatView));
-    MainCB.FloatInfo   = XMVectorSet(instanceOffset.x, instanceOffset.y, instanceOffset.z, errorThreshold);
-    MainCB.IntInfo     = XMVectorSetInt(displayType < 0 ? UINT32_MAX : displayType, 0, 0, 0);
+    MainData.MatView     = XMMatrixTranspose(matTrans * matRot);
+    MainData.MatProj     = XMMatrixTranspose(XMMatrixPerspectiveFovRH(45.0f, aspect, 1000000.0f, 0.001f));
+    MainData.MatViewProj = MainData.MatProj * MainData.MatView;
+    MainData.MatNormal   = XMMatrixTranspose(XMMatrixInverse(nullptr, MainData.MatView));
+    MainData.FloatInfo   = XMVectorSet(instanceOffset.x, instanceOffset.y, instanceOffset.z, errorThreshold);
+    MainData.IntInfo     = XMVectorSetInt(displayType < 0 ? UINT32_MAX : displayType, 0, 0, 0);
 
     void         *pCameraDataBegin = nullptr;
     CD3DX12_RANGE readRange(0, 0);
-    ThrowIfFailed(pCameraGPU->Map(0, &readRange, &pCameraDataBegin));
-    memcpy(pCameraDataBegin, &MainCB, sizeof(MainCB));
-    pCameraGPU->Unmap(0, nullptr);
+    ThrowIfFailed(pMainCB->Map(0, &readRange, &pCameraDataBegin));
+    memcpy(pCameraDataBegin, &MainData, sizeof(MainData));
+    pMainCB->Unmap(0, nullptr);
 
     FillCommandList();
     ExecuteCommandList();
@@ -344,7 +351,7 @@ int WINAPI wWinMain(_In_ HINSTANCE     hCurInstance,
 
     // try
     //{
-    RaiiMainWindow raiiMainWindow;
+    TRaiiMainWindow raiiMainWindow;
 
     LoadPipeline(WindowWidth, WindowHeight);
     LoadAssets();

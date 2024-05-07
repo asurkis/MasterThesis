@@ -5,7 +5,7 @@
 static LPCWSTR WINDOW_CLASS_NAME = L"WindowClass1";
 static bool    isInit            = false;
 
-RaiiMainWindow::RaiiMainWindow()
+TRaiiMainWindow::TRaiiMainWindow()
 {
     if (isInit)
         throw std::runtime_error("Initializing main window twice");
@@ -41,37 +41,37 @@ RaiiMainWindow::RaiiMainWindow()
     WindowHeight = rect.bottom - rect.top;
 }
 
-RaiiMainWindow::~RaiiMainWindow()
+TRaiiMainWindow::~TRaiiMainWindow()
 {
     DestroyWindow(hWnd);
     UnregisterClassW(WINDOW_CLASS_NAME, hInstance);
 }
 
-RaiiHandle::RaiiHandle() noexcept {}
+TRaiiHandle::TRaiiHandle() noexcept {}
 
-RaiiHandle::RaiiHandle(HANDLE handle) : hSelf(handle) {}
+TRaiiHandle::TRaiiHandle(HANDLE handle) : hSelf(handle) {}
 
-RaiiHandle::~RaiiHandle() { Clear(); }
+TRaiiHandle::~TRaiiHandle() { Clear(); }
 
-RaiiHandle::RaiiHandle(RaiiHandle &&rhs) noexcept : hSelf(rhs.Release()) {}
+TRaiiHandle::TRaiiHandle(TRaiiHandle &&rhs) noexcept : hSelf(rhs.Release()) {}
 
-RaiiHandle &RaiiHandle::operator=(RaiiHandle &&rhs) noexcept
+TRaiiHandle &TRaiiHandle::operator=(TRaiiHandle &&rhs) noexcept
 {
     Clear();
     hSelf = rhs.Release();
     return *this;
 }
 
-HANDLE RaiiHandle::Get() const noexcept { return hSelf; }
+HANDLE TRaiiHandle::Get() const noexcept { return hSelf; }
 
-HANDLE RaiiHandle::Release() noexcept
+HANDLE TRaiiHandle::Release() noexcept
 {
     HANDLE h = hSelf;
     hSelf    = nullptr;
     return h;
 }
 
-void RaiiHandle::Clear()
+void TRaiiHandle::Clear()
 {
     if (hSelf)
     {

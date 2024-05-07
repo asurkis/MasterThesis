@@ -1,14 +1,17 @@
 #include "stdafx.h"
 
 #include "UtilD3D.h"
+#include <DirectXMath.h>
+
+using namespace DirectX;
 
 bool useWarpDevice = false;
 
-inline PFence     pFrameFence[FRAME_COUNT];
-inline UINT64     nextFenceValue[FRAME_COUNT];
-inline RaiiHandle hFenceEvent[FRAME_COUNT];
+inline PFence      pFrameFence[FRAME_COUNT];
+inline UINT64      nextFenceValue[FRAME_COUNT];
+inline TRaiiHandle hFenceEvent[FRAME_COUNT];
 
-ComPtr<IDXGIAdapter1> GetHWAdapter(ComPtr<IDXGIFactory1> pFactory1)
+static ComPtr<IDXGIAdapter1> GetHWAdapter(ComPtr<IDXGIFactory1> pFactory1)
 {
     ComPtr<IDXGIFactory6> pFactory;
     ThrowIfFailed(pFactory1.As(&pFactory));
@@ -49,7 +52,7 @@ ComPtr<IDXGIAdapter1> GetHWAdapter(ComPtr<IDXGIFactory1> pFactory1)
     return nullptr;
 }
 
-void CreateDepthBuffer(UINT width, UINT height)
+static void CreateDepthBuffer(UINT width, UINT height)
 {
     CD3DX12_HEAP_PROPERTIES dsvProps(D3D12_HEAP_TYPE_DEFAULT);
     auto                    desc       = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_D32_FLOAT,
@@ -191,7 +194,7 @@ void LoadPipeline(UINT width, UINT height)
     ThrowIfFailed(pCommandList->Close());
 }
 
-void WaitForFrame(UINT frame)
+static void WaitForFrame(UINT frame)
 {
     UINT64       value  = nextFenceValue[frame]++;
     ID3D12Fence *pFence = pFrameFence[frame].Get();
@@ -242,9 +245,9 @@ void UpdateRenderTargetSize(UINT width, UINT height)
     CreateDepthBuffer(width, height);
 }
 
-PResource GetCurRenderTarget() { return pRenderTargets[curFrame]; }
+static PResource GetCurRenderTarget() { return pRenderTargets[curFrame]; }
 
-void MonoPipeline::Load(const std::filesystem::path &pathVS, const std::filesystem::path &pathPS)
+void TMonoPipeline::Load(const std::filesystem::path &pathVS, const std::filesystem::path &pathPS)
 {
     PPipelineState pPipelineState;
     PRootSignature pRootSignature;
@@ -258,18 +261,27 @@ void MonoPipeline::Load(const std::filesystem::path &pathVS, const std::filesyst
     {
         IE_POSITION = 0,
         IE_NORMAL,
+        IE_INSTANCE_OFFSET,
         IE_TOTAL
     };
 
-    D3D12_INPUT_ELEMENT_DESC inputElementDesc[IE_TOTAL] = {};
-    inputElementDesc[IE_POSITION].SemanticName          = "POSITION";
-    inputElementDesc[IE_POSITION].Format                = DXGI_FORMAT_R32G32B32_FLOAT;
-    inputElementDesc[IE_POSITION].AlignedByteOffset     = 0;
-    inputElementDesc[IE_POSITION].InputSlotClass        = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
-    inputElementDesc[IE_NORMAL].SemanticName            = "NORMAL";
-    inputElementDesc[IE_NORMAL].Format                  = DXGI_FORMAT_R32G32B32_FLOAT;
-    inputElementDesc[IE_NORMAL].AlignedByteOffset       = sizeof(float3);
-    inputElementDesc[IE_NORMAL].InputSlotClass          = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+    D3D12_INPUT_ELEMENT_DESC inputElementDesc[IE_TOTAL]       = {};
+    inputElementDesc[IE_POSITION].SemanticName                = "POSITION";
+    inputElementDesc[IE_POSITION].Format                      = DXGI_FORMAT_R32G32B32_FLOAT;
+    inputElementDesc[IE_POSITION].InputSlot                   = 0;
+    inputElementDesc[IE_POSITION].AlignedByteOffset           = 0;
+    inputElementDesc[IE_POSITION].InputSlotClass              = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+    inputElementDesc[IE_NORMAL].SemanticName                  = "NORMAL";
+    inputElementDesc[IE_NORMAL].Format                        = DXGI_FORMAT_R32G32B32_FLOAT;
+    inputElementDesc[IE_NORMAL].InputSlot                     = 0;
+    inputElementDesc[IE_NORMAL].AlignedByteOffset             = sizeof(float3);
+    inputElementDesc[IE_NORMAL].InputSlotClass                = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+    inputElementDesc[IE_INSTANCE_OFFSET].SemanticName         = "INSTANCE_OFFSET";
+    inputElementDesc[IE_INSTANCE_OFFSET].Format               = DXGI_FORMAT_R32G32B32_FLOAT;
+    inputElementDesc[IE_INSTANCE_OFFSET].InputSlot            = 1;
+    inputElementDesc[IE_INSTANCE_OFFSET].AlignedByteOffset    = 0;
+    inputElementDesc[IE_INSTANCE_OFFSET].InputSlotClass       = D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA;
+    inputElementDesc[IE_INSTANCE_OFFSET].InstanceDataStepRate = 1;
 
     D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
     psoDesc.pRootSignature                     = pRootSignature.Get();
@@ -300,9 +312,9 @@ void MonoPipeline::Load(const std::filesystem::path &pathVS, const std::filesyst
     this->pRootSignature = std::move(pRootSignature);
 }
 
-void MeshletPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeAS,
-                                   const std::vector<BYTE> &bytecodeMS,
-                                   const std::vector<BYTE> &bytecodePS)
+void TMeshletPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeAS,
+                                    const std::vector<BYTE> &bytecodeMS,
+                                    const std::vector<BYTE> &bytecodePS)
 {
     PPipelineState pPipelineState;
     PRootSignature pRootSignature;
@@ -345,16 +357,16 @@ void MeshletPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeAS,
     this->pRootSignature = std::move(pRootSignature);
 }
 
-void MeshletPipeline::Load(const std::filesystem::path &pathMS, const std::filesystem::path &pathPS)
+void TMeshletPipeline::Load(const std::filesystem::path &pathMS, const std::filesystem::path &pathPS)
 {
     std::vector<BYTE> dataMS = ReadFile(pathMS);
     std::vector<BYTE> dataPS = ReadFile(pathPS);
     LoadBytecode({}, dataMS, dataPS);
 }
 
-void MeshletPipeline::Load(const std::filesystem::path &pathMS,
-                           const std::filesystem::path &pathPS,
-                           const std::filesystem::path &pathAS)
+void TMeshletPipeline::Load(const std::filesystem::path &pathMS,
+                            const std::filesystem::path &pathPS,
+                            const std::filesystem::path &pathAS)
 {
     std::vector<BYTE> dataMS = ReadFile(pathMS);
     std::vector<BYTE> dataPS = ReadFile(pathPS);
@@ -397,12 +409,12 @@ static void QueryUploadVector(const std::vector<T> &data, PResource *outBuffer, 
     pCommandList->ResourceBarrier(1, &barrier);
 }
 
-void MonoLodGPU::Upload(const MonoLodCPU &model)
+void TMonoLodGPU::Upload(const TMonoLodCPU &model)
 {
     PResource pUploadVertices;
     PResource pUploadIndices;
 
-    nIndices = model.Indices.size();
+    mNIndices = model.Indices.size();
 
     ThrowIfFailed(pCommandList->Reset(pCommandAllocator.Get(), nullptr));
     QueryUploadVector(model.Vertices, &pVertices, &pUploadVertices);
@@ -416,7 +428,7 @@ void MonoLodGPU::Upload(const MonoLodCPU &model)
 
     if (pFence->GetCompletedValue() != 1)
     {
-        RaiiHandle hEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        TRaiiHandle hEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         if (!hEvent.Get())
             ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
         pFence->SetEventOnCompletion(1, hEvent.Get());
@@ -424,15 +436,122 @@ void MonoLodGPU::Upload(const MonoLodCPU &model)
     }
 
     mVertexBufferView.BufferLocation = pVertices->GetGPUVirtualAddress();
-    mVertexBufferView.SizeInBytes    = sizeof(Vertex) * model.Vertices.size();
-    mVertexBufferView.StrideInBytes  = sizeof(Vertex);
+    mVertexBufferView.SizeInBytes    = sizeof(TVertex) * model.Vertices.size();
+    mVertexBufferView.StrideInBytes  = sizeof(TVertex);
 
     mIndexBufferView.BufferLocation = pIndices->GetGPUVirtualAddress();
     mIndexBufferView.SizeInBytes    = sizeof(uint) * model.Indices.size();
     mIndexBufferView.Format         = DXGI_FORMAT_R32_UINT;
 }
 
-void MeshletModelGPU::Upload(const MeshletModelCPU &model)
+void TMonoLodGPU::Render(UINT InstanceCount, UINT StartInstance) const
+{
+    if (InstanceCount == 0)
+        return;
+    pCommandList->IASetIndexBuffer(&mIndexBufferView);
+    pCommandList->IASetVertexBuffers(0, 1, &mVertexBufferView);
+    pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    pCommandList->DrawIndexedInstanced(mNIndices, InstanceCount, 0, 0, StartInstance);
+}
+
+void TMonoModelGPU::InitBBox(const TMonoLodCPU &lod)
+{
+    mBBoxMin = XMVectorSet(INFINITY, INFINITY, INFINITY, 0.0f);
+    mBBoxMax = XMVectorSet(-INFINITY, -INFINITY, -INFINITY, 0.0f);
+    for (const TVertex &vert : lod.Vertices)
+    {
+        mBBoxMin = XMVectorMin(mBBoxMin, XMLoadFloat3(&vert.Position));
+        mBBoxMax = XMVectorMin(mBBoxMax, XMLoadFloat3(&vert.Position));
+    }
+}
+
+size_t TMonoModelGPU::PickLod(float3 pos) const { return 0; }
+
+void TMonoModelGPU::LoadGLBs(std::string_view basePath, size_t nLods, size_t nMaxInstances)
+{
+    mLods.resize(nLods);
+    for (size_t iLod = 0; iLod < nLods; ++iLod)
+    {
+        std::ostringstream lodPath;
+        lodPath << basePath << "_LOD" << iLod + 2 << ".glb";
+        TMonoLodCPU lodCPU;
+        lodCPU.LoadGLB(lodPath.str());
+        if (iLod == 0)
+            InitBBox(lodCPU);
+        mLods[iLod].Upload(lodCPU);
+    }
+
+    mInstances.resize(nMaxInstances);
+    mInstancesOrdered.resize(nMaxInstances);
+    mPickedLods.resize(nMaxInstances);
+    mLodOffset.resize(nLods + 1);
+
+    CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_UPLOAD);
+    auto                    desc = CD3DX12_RESOURCE_DESC::Buffer(nMaxInstances * sizeof(float3));
+    ThrowIfFailed(pDevice->CreateCommittedResource(&heapProps,
+                                                   D3D12_HEAP_FLAG_NONE,
+                                                   &desc,
+                                                   D3D12_RESOURCE_STATE_GENERIC_READ,
+                                                   nullptr,
+                                                   IID_PPV_ARGS(&pInstanceBuffer)));
+
+    mInstanceBufferView                = {};
+    mInstanceBufferView.BufferLocation = pInstanceBuffer->GetGPUVirtualAddress();
+    mInstanceBufferView.SizeInBytes    = nMaxInstances * sizeof(float3);
+    mInstanceBufferView.StrideInBytes  = sizeof(float3);
+}
+
+void TMonoModelGPU::Reset(int displayType)
+{
+    mNInstances  = 0;
+    mDisplayType = displayType;
+}
+
+void TMonoModelGPU::Instance(float3 pos)
+{
+    size_t pickedLod = 0;
+    if (mDisplayType >= 0)
+        pickedLod = mDisplayType;
+    else
+        pickedLod = PickLod(pos);
+    mInstances[mNInstances]  = pos;
+    mPickedLods[mNInstances] = pickedLod;
+    ++mNInstances;
+}
+
+void TMonoModelGPU::Commit()
+{
+    if (mNInstances == 0)
+        return;
+
+    std::fill(mLodOffset.begin(), mLodOffset.end(), 0);
+    for (size_t i = 0; i < mNInstances; ++i)
+        ++mLodOffset[mPickedLods[i] + 1];
+    for (size_t i = 2; i <= mLods.size(); ++i)
+        mLodOffset[i] += mLodOffset[i - 1];
+    for (size_t i = 0; i < mNInstances; ++i)
+        mInstancesOrdered[mLodOffset[mPickedLods[i]]++] = mInstances[i];
+    for (size_t i = mLods.size(); i > 0; --i)
+        mLodOffset[i] = mLodOffset[i - 1];
+    mLodOffset[0] = 0;
+
+    void         *pInstanceDataBegin = nullptr;
+    CD3DX12_RANGE readRange(0, 0);
+    ThrowIfFailed(pInstanceBuffer->Map(0, &readRange, &pInstanceDataBegin));
+    memcpy(pInstanceDataBegin, mInstancesOrdered.data(), sizeof(float3) * mNInstances);
+    pInstanceBuffer->Unmap(0, nullptr);
+
+    pCommandList->IASetVertexBuffers(1, 1, &mInstanceBufferView);
+    for (size_t iLod = 0; iLod < mLods.size(); ++iLod)
+    {
+        size_t lodBeg = mLodOffset[iLod];
+        size_t lodEnd = mLodOffset[iLod + 1];
+        size_t lodN   = lodEnd - lodBeg;
+        mLods[iLod].Render(lodN, lodBeg);
+    }
+}
+
+void TMeshletModelGPU::Upload(const TMeshletModelCPU &model)
 {
     PResource pUploadVertices;
     PResource pUploadGlobalIndices;
@@ -457,7 +576,7 @@ void MeshletModelGPU::Upload(const MeshletModelCPU &model)
 
     if (pFence->GetCompletedValue() != 1)
     {
-        RaiiHandle hEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        TRaiiHandle hEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         if (!hEvent.Get())
             ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
         pFence->SetEventOnCompletion(1, hEvent.Get());
@@ -473,19 +592,11 @@ void MeshletModelGPU::Upload(const MeshletModelCPU &model)
     }
 }
 
-void MonoLodGPU::Render(const MainConstantBuffer &MainCB, float3 InstanceOffset) const
-{
-    pCommandList->IASetIndexBuffer(&mIndexBufferView);
-    pCommandList->IASetVertexBuffers(0, 1, &mVertexBufferView);
-    pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    pCommandList->DrawIndexedInstanced(nIndices, 1, 0, 0, 0);
-}
-
-void MeshletModelGPU::Render(int nInstances)
+void TMeshletModelGPU::Render(int nInstances)
 {
     for (uint iMesh = 0; iMesh < meshes.size(); ++iMesh)
     {
-        MeshDesc &mesh = meshes[iMesh];
+        TMeshDesc &mesh = meshes[iMesh];
         pCommandList->SetGraphicsRoot32BitConstant(1, mesh.MeshletCount, 0);
         pCommandList->SetGraphicsRoot32BitConstant(1, mesh.MeshletTriangleOffsets, 1);
         pCommandList->SetGraphicsRootShaderResourceView(2, pVertices->GetGPUVirtualAddress());

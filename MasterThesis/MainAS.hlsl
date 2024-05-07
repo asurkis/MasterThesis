@@ -87,16 +87,16 @@ void main(
 {
     uint iInstance = dtid.y;
     uint iMeshlet = MeshInfo.MeshletOffset + dtid.x;
-    uint3 mOff = uint3(
+    uint3 iOff = uint3(
         GetZCodeComponent3(iInstance >> 0),
         GetZCodeComponent3(iInstance >> 1),
         GetZCodeComponent3(iInstance >> 2));
-    float3 off = mOff * MainCB.FloatInfo.xyz;
+    float3 off = iOff * MainCB.FloatInfo.xyz;
     float4x4 MatTranslate = float4x4(
         float4(1.0f, 0.0f, 0.0f, 0.0f),
         float4(0.0f, 1.0f, 0.0f, 0.0f),
         float4(0.0f, 0.0f, 1.0f, 0.0f),
-        float4(-off, 1.0f)
+        float4(off, 1.0f)
     );
     float4x4 MatFull = mul(MatTranslate, MainCB.MatViewProj);
     float VisibleRadius = 0.0f;

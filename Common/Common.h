@@ -28,13 +28,13 @@ inline void AssertEqFn(const L &left, const R &right, std::string_view leftText,
 
 constexpr uint MESHLET_MAX_PRIMITIVES = 128;
 
-struct Vertex
+struct TVertex
 {
     float3 Position;
     float3 Normal;
 };
 
-struct MeshletDesc
+struct TMeshletDesc
 {
     uint  VertCount;
     uint  VertOffset;
@@ -46,29 +46,29 @@ struct MeshletDesc
     float Error;
 };
 
-struct BoundingBox
+struct TBoundingBox
 {
     float3 Min;
     float3 Max;
 };
 
-struct MeshDesc
+struct TMeshDesc
 {
     uint MeshletCount;
     uint MeshletTriangleOffsets;
 };
 
-struct MonoLodCPU
+struct TMonoLodCPU
 {
-    std::vector<Vertex> Vertices;
-    std::vector<uint>   Indices;
+    std::vector<TVertex> Vertices;
+    std::vector<uint>    Indices;
 
     void LoadGLB(const std::string &path);
 };
 
-struct MeshletModelCPU
+struct TMeshletModelCPU
 {
-    std::vector<Vertex> Vertices;
+    std::vector<TVertex> Vertices;
 
     // Блоки с индексами для мешлетов
     std::vector<uint> GlobalIndices;
@@ -76,10 +76,10 @@ struct MeshletModelCPU
     // Индексы внутри мешлета, 10 бит на каждую из компонент
     std::vector<uint> Primitives;
 
-    std::vector<MeshletDesc> Meshlets;
-    std::vector<BoundingBox> MeshletBoxes;
+    std::vector<TMeshletDesc> Meshlets;
+    std::vector<TBoundingBox> MeshletBoxes;
 
-    std::vector<MeshDesc> Meshes;
+    std::vector<TMeshDesc> Meshes;
 
     void SaveToFile(const std::filesystem::path &path) const;
     void LoadFromFile(const std::filesystem::path &path);

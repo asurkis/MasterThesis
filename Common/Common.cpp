@@ -30,7 +30,7 @@ template <typename T> static void ReadVec(std::istream &sin, std::vector<T> &dat
     sin.read(reinterpret_cast<char *>(data.data()), size * sizeof(T));
 }
 
-void MonoLodCPU::LoadGLB(const std::string &path)
+void TMonoLodCPU::LoadGLB(const std::string &path)
 {
     tinygltf::Model    inModel;
     tinygltf::TinyGLTF tinyGltfCtx;
@@ -102,7 +102,7 @@ void MonoLodCPU::LoadGLB(const std::string &path)
         unsigned char *pPosition = &positionBuffer.data[offPosition];
         unsigned char *pNormal   = &normalBuffer.data[offNormal];
 
-        Vertex vert   = {};
+        TVertex vert   = {};
         vert.Position = *reinterpret_cast<float3 *>(pPosition);
         vert.Normal   = *reinterpret_cast<float3 *>(pNormal);
         Vertices.push_back(vert);
@@ -139,7 +139,7 @@ void MonoLodCPU::LoadGLB(const std::string &path)
     }
 }
 
-void MeshletModelCPU::SaveToFile(const std::filesystem::path &path) const
+void TMeshletModelCPU::SaveToFile(const std::filesystem::path &path) const
 {
     std::ofstream fout(path, std::ios::binary);
     WriteVec(fout, Vertices);
@@ -149,7 +149,7 @@ void MeshletModelCPU::SaveToFile(const std::filesystem::path &path) const
     WriteVec(fout, Meshes);
 }
 
-void MeshletModelCPU::LoadFromFile(const std::filesystem::path &path)
+void TMeshletModelCPU::LoadFromFile(const std::filesystem::path &path)
 {
     using namespace DirectX;
 
@@ -165,8 +165,8 @@ void MeshletModelCPU::LoadFromFile(const std::filesystem::path &path)
     MeshletBoxes.resize(Meshlets.size());
     for (uint iMeshlet = 0; iMeshlet < Meshlets.size(); ++iMeshlet)
     {
-        const MeshletDesc &meshlet = Meshlets[iMeshlet];
-        BoundingBox       &aabb    = MeshletBoxes[iMeshlet];
+        const TMeshletDesc &meshlet = Meshlets[iMeshlet];
+        TBoundingBox       &aabb    = MeshletBoxes[iMeshlet];
 
         aabb.Min = float3(INFINITY, INFINITY, INFINITY);
         aabb.Max = float3(-INFINITY, -INFINITY, -INFINITY);
@@ -174,7 +174,7 @@ void MeshletModelCPU::LoadFromFile(const std::filesystem::path &path)
         for (uint iMeshletVert = 0; iMeshletVert < meshlet.VertCount; ++iMeshletVert)
         {
             uint          iVert = GlobalIndices[meshlet.VertOffset + iMeshletVert];
-            const Vertex &vert  = Vertices[iVert & UINT32_C(0x7FFFFFFF)];
+            const TVertex &vert  = Vertices[iVert & UINT32_C(0x7FFFFFFF)];
             const float3 &pos   = vert.Position;
 
             aabb.Min.x = XMMin(aabb.Min.x, pos.x);
@@ -188,8 +188,8 @@ void MeshletModelCPU::LoadFromFile(const std::filesystem::path &path)
 
     for (size_t iMeshlet = 0; iMeshlet < Meshlets.size(); ++iMeshlet)
     {
-        const MeshletDesc &meshlet = Meshlets[iMeshlet];
-        const BoundingBox &aabb    = MeshletBoxes[iMeshlet];
+        const TMeshletDesc &meshlet = Meshlets[iMeshlet];
+        const TBoundingBox &aabb    = MeshletBoxes[iMeshlet];
         // Восстанавливаем AABB родителей
         float maxParentError = 0.0f;
         for (uint iiParent = 0; iiParent < meshlet.ParentCount; ++iiParent)
@@ -197,7 +197,7 @@ void MeshletModelCPU::LoadFromFile(const std::filesystem::path &path)
             uint iParent = meshlet.ParentOffset + iiParent;
             if (iParent <= iMeshlet || iParent >= Meshlets.size())
                 throw std::runtime_error("Incorrect Parent1");
-            BoundingBox &aabbParent = MeshletBoxes[iParent];
+            TBoundingBox &aabbParent = MeshletBoxes[iParent];
 
             aabbParent.Min.x = XMMin(aabbParent.Min.x, aabb.Min.x);
             aabbParent.Min.y = XMMin(aabbParent.Min.y, aabb.Min.y);

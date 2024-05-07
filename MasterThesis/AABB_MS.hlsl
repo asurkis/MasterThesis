@@ -5,11 +5,11 @@ uint GetVertexIndex(TMeshlet m, uint localIndex)
     return GlobalIndices[m.VertOffset + localIndex];
 }
 
-VertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
+TVertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
 {
     TVertex v = Vertices[vertexIndex];
 
-    VertexOut vout;
+    TVertexOut vout;
     vout.PositionVS = mul(float4(v.Position, 1), MainCB.MatView).xyz;
     vout.PositionHS = mul(float4(v.Position, 1), MainCB.MatViewProj);
     vout.MeshletIndex = meshletIndex;
@@ -25,7 +25,7 @@ void main(
     uint gid : SV_GroupID,
     uint gtid : SV_GroupThreadID,
     out indices uint2 lines[12],
-    out vertices VertexOut verts[8])
+    out vertices TVertexOut verts[8])
 {
     uint iMeshlet = payload.MeshletIndex[gid];
     TMeshlet m = Meshlets[iMeshlet];
@@ -40,7 +40,7 @@ void main(
         ogPos.y = gtid & 2 ? box.Max.y : box.Min.y;
         ogPos.z = gtid & 4 ? box.Max.z : box.Min.z;
 
-        VertexOut vout;
+        TVertexOut vout;
         vout.PositionVS = mul(float4(ogPos, 1), MainCB.MatView).xyz;
         vout.PositionHS = mul(float4(ogPos, 1), MainCB.MatViewProj);
         vout.MeshletIndex = iMeshlet;

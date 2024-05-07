@@ -9,30 +9,30 @@ inline HWND      hWnd         = nullptr;
 inline UINT      WindowWidth  = 0;
 inline UINT      WindowHeight = 0;
 
-class RaiiMainWindow
+class TRaiiMainWindow
 {
   public:
-    RaiiMainWindow(const RaiiMainWindow &)            = delete;
-    RaiiMainWindow &operator=(const RaiiMainWindow &) = delete;
+    TRaiiMainWindow(const TRaiiMainWindow &)            = delete;
+    TRaiiMainWindow &operator=(const TRaiiMainWindow &) = delete;
 
-    explicit RaiiMainWindow();
-    ~RaiiMainWindow();
+    explicit TRaiiMainWindow();
+    ~TRaiiMainWindow();
 };
 
-class RaiiHandle
+class TRaiiHandle
 {
     HANDLE hSelf = nullptr;
 
   public:
-    RaiiHandle(const RaiiHandle &)            = delete;
-    RaiiHandle &operator=(const RaiiHandle &) = delete;
+    TRaiiHandle(const TRaiiHandle &)            = delete;
+    TRaiiHandle &operator=(const TRaiiHandle &) = delete;
 
-    RaiiHandle() noexcept;
-    RaiiHandle(HANDLE handle);
-    ~RaiiHandle();
+    TRaiiHandle() noexcept;
+    TRaiiHandle(HANDLE handle);
+    ~TRaiiHandle();
 
-    RaiiHandle(RaiiHandle &&rhs) noexcept;
-    RaiiHandle &operator=(RaiiHandle &&rhs) noexcept;
+    TRaiiHandle(TRaiiHandle &&rhs) noexcept;
+    TRaiiHandle &operator=(TRaiiHandle &&rhs) noexcept;
 
     HANDLE Get() const noexcept;
     HANDLE Release() noexcept;
