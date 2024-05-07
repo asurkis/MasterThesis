@@ -87,7 +87,7 @@ static void LoadAssets()
     }
 
 #ifdef USE_MONO_LODS
-    model.LoadGLBs("../Assets/Statue", 1, MAX_NUM_INSTANCES);
+    model.LoadGLBs("../Assets/Statue", 7, MAX_NUM_INSTANCES);
 #else
     TMeshletModelCPU modelCPU;
     modelCPU.LoadFromFile("../Assets/model.bin");
@@ -182,7 +182,7 @@ static void FillCommandList()
     pCommandList->SetGraphicsRootSignature(mainPipeline.GetRootSignatureRaw());
     pCommandList->SetGraphicsRootConstantBufferView(0, pMainCB->GetGPUVirtualAddress());
 #ifdef USE_MONO_LODS
-    model.Reset();
+    model.Reset(displayType);
     for (int i = 0; i < nInstances; ++i)
     {
         uint ix = GetZCodeComponent3(i >> 0);
@@ -191,8 +191,6 @@ static void FillCommandList()
         model.Instance(float3(ix * instanceOffset.x, iy * instanceOffset.y, iz * instanceOffset.z));
     }
     model.Commit();
-
-    // model.mLods[0].Render();
 #else
     if (drawModel)
     {
@@ -239,7 +237,7 @@ static void OnRender()
         ImGui::Text("Rotation Y: %.1f deg", XMConvertToDegrees(camRotY));
     }
 #ifdef USE_MONO_LODS
-    ImGui::SliderInt("LOD", &displayType, -1, model.mLods.size());
+    ImGui::SliderInt("LOD", &displayType, -1, model.LodCount() - 1);
 #else
     ImGui::Checkbox("Draw model", &drawModel);
     ImGui::Checkbox("Draw meshlet AABB", &drawMeshletAABB);
@@ -315,14 +313,15 @@ static void OnRender()
                                   0.0f,
                                   1.0f);
 
-    XMMATRIX matTrans = XMMatrixTranslationFromVector(camOffset * vecForward - camFocus);
+    MainData.CameraPos = camFocus - camOffset * vecForward;
+    XMMATRIX matTrans  = XMMatrixTranslationFromVector(-MainData.CameraPos);
 
     MainData.MatView     = XMMatrixTranspose(matTrans * matRot);
     MainData.MatProj     = XMMatrixTranspose(XMMatrixPerspectiveFovRH(45.0f, aspect, 1000000.0f, 0.001f));
     MainData.MatViewProj = MainData.MatProj * MainData.MatView;
     MainData.MatNormal   = XMMatrixTranspose(XMMatrixInverse(nullptr, MainData.MatView));
     MainData.FloatInfo   = XMVectorSet(instanceOffset.x, instanceOffset.y, instanceOffset.z, errorThreshold);
-    MainData.IntInfo     = XMVectorSetInt(displayType < 0 ? UINT32_MAX : displayType, 0, 0, 0);
+    MainData.IntInfo     = XMVectorSetInt(WindowWidth, WindowHeight, displayType < 0 ? UINT32_MAX : displayType, 0);
 
     void         *pCameraDataBegin = nullptr;
     CD3DX12_RANGE readRange(0, 0);

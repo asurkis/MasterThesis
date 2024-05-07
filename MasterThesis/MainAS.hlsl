@@ -42,8 +42,8 @@ bool IsEnough(float4x4 MatFull, float err, TBoundingBox box, out float VisibleRa
         return true;
     float r = diameter / hs.w;
     VisibleRadius = r;
-    return err * r < MainCB.FloatInfo.w;
-    // return r < Camera.FloatInfo.w;
+    // return err * r < MainCB.FloatInfo.w;
+    return r < MainCB.FloatInfo.w;
 }
 
 bool ShouldDisplay(float4x4 MatFull, uint iMeshlet, out float VisibleRadius)
@@ -53,10 +53,10 @@ bool ShouldDisplay(float4x4 MatFull, uint iMeshlet, out float VisibleRadius)
     
     TMeshlet meshlet = Meshlets[iMeshlet];
     TBoundingBox box = MeshletBoxes[iMeshlet];
-    if (MainCB.IntInfo.x != 0xFFFFFFFF)
+    if (MainCB.IntInfo.z != 0xFFFFFFFF)
     {
         IsEnough(MatFull, meshlet.Error, box, VisibleRadius);
-        return meshlet.Height == MainCB.IntInfo.x / 3;
+        return meshlet.Height == MainCB.IntInfo.z / 3;
     }
     
     uint iParent = meshlet.ParentOffset;

@@ -461,11 +461,29 @@ void TMonoModelGPU::InitBBox(const TMonoLodCPU &lod)
     for (const TVertex &vert : lod.Vertices)
     {
         mBBoxMin = XMVectorMin(mBBoxMin, XMLoadFloat3(&vert.Position));
-        mBBoxMax = XMVectorMin(mBBoxMax, XMLoadFloat3(&vert.Position));
+        mBBoxMax = XMVectorMax(mBBoxMax, XMLoadFloat3(&vert.Position));
     }
 }
 
-size_t TMonoModelGPU::PickLod(float3 pos) const { return 0; }
+size_t TMonoModelGPU::PickLod(float3 pos) const
+{
+    float4 center   = XMLoadFloat3(&pos) + 0.5 * (mBBoxMin + mBBoxMax);
+    float  diameter = XMVectorGetX(XMVector3Length(mBBoxMax - mBBoxMin));
+    float  distance = XMVectorGetX(XMVector3Length(center - MainData.CameraPos));
+    float  radius   = 0.5f * diameter;
+    if (distance < radius)
+        return 0;
+    float angularRadius     = radius / distance; // approximate
+    float pixelRadius       = angularRadius * XMMin(WindowWidth, WindowHeight);
+    float threshold         = XMVectorGetW(MainData.FloatInfo);
+    float preferredVertices = pixelRadius * pixelRadius / threshold;
+    for (size_t iLod = 1; iLod < LodCount(); ++iLod)
+    {
+        if (mLods[iLod].IndexCount() < preferredVertices)
+            return iLod - 1;
+    }
+    return LodCount() - 1;
+}
 
 void TMonoModelGPU::LoadGLBs(std::string_view basePath, size_t nLods, size_t nMaxInstances)
 {
@@ -473,7 +491,7 @@ void TMonoModelGPU::LoadGLBs(std::string_view basePath, size_t nLods, size_t nMa
     for (size_t iLod = 0; iLod < nLods; ++iLod)
     {
         std::ostringstream lodPath;
-        lodPath << basePath << "_LOD" << iLod + 2 << ".glb";
+        lodPath << basePath << "_LOD" << iLod << ".glb";
         TMonoLodCPU lodCPU;
         lodCPU.LoadGLB(lodPath.str());
         if (iLod == 0)
@@ -527,11 +545,11 @@ void TMonoModelGPU::Commit()
     std::fill(mLodOffset.begin(), mLodOffset.end(), 0);
     for (size_t i = 0; i < mNInstances; ++i)
         ++mLodOffset[mPickedLods[i] + 1];
-    for (size_t i = 2; i <= mLods.size(); ++i)
+    for (size_t i = 2; i <= LodCount(); ++i)
         mLodOffset[i] += mLodOffset[i - 1];
     for (size_t i = 0; i < mNInstances; ++i)
         mInstancesOrdered[mLodOffset[mPickedLods[i]]++] = mInstances[i];
-    for (size_t i = mLods.size(); i > 0; --i)
+    for (size_t i = LodCount(); i > 0; --i)
         mLodOffset[i] = mLodOffset[i - 1];
     mLodOffset[0] = 0;
 
@@ -542,7 +560,7 @@ void TMonoModelGPU::Commit()
     pInstanceBuffer->Unmap(0, nullptr);
 
     pCommandList->IASetVertexBuffers(1, 1, &mInstanceBufferView);
-    for (size_t iLod = 0; iLod < mLods.size(); ++iLod)
+    for (size_t iLod = 0; iLod < LodCount(); ++iLod)
     {
         size_t lodBeg = mLodOffset[iLod];
         size_t lodEnd = mLodOffset[iLod + 1];

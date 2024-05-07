@@ -9,6 +9,7 @@ struct TMainCB
     float4x4 MatProj;
     float4x4 MatViewProj;
     float4x4 MatNormal;
+    float4 CameraPos;
     float4 FloatInfo;
     uint4 IntInfo;
 };

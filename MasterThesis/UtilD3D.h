@@ -35,8 +35,9 @@ struct TMainData
     float4x4 MatProj;
     float4x4 MatViewProj;
     float4x4 MatNormal;
+    float4   CameraPos;
     float4   FloatInfo; // xyz = InstanceOffset, w = ErrorThreshold
-    uint4    IntInfo;   // x = DisplayType
+    uint4    IntInfo;   // xy = ScreenSize, z = DisplayType
 };
 
 inline TMainData MainData;
@@ -83,16 +84,18 @@ class TMonoLodGPU
   public:
     void Upload(const TMonoLodCPU &model);
     void Render(UINT InstanceCount = 1, UINT StartInstance = 0) const;
+
+    constexpr uint IndexCount() const noexcept { return mNIndices; }
 };
 
-struct TMonoModelGPU
+class TMonoModelGPU
 {
     PResource                pInstanceBuffer;
-    D3D12_VERTEX_BUFFER_VIEW mInstanceBufferView;
+    D3D12_VERTEX_BUFFER_VIEW mInstanceBufferView = {};
 
     std::vector<TMonoLodGPU> mLods;
-    float4                   mBBoxMin;
-    float4                   mBBoxMax;
+    float4                   mBBoxMin = {};
+    float4                   mBBoxMax = {};
 
     std::vector<float3> mInstances;
     std::vector<float3> mInstancesOrdered;
@@ -110,6 +113,8 @@ struct TMonoModelGPU
     void Reset(int displayType = -1);
     void Instance(float3 pos);
     void Commit();
+
+    size_t LodCount() const noexcept { return mLods.size(); }
 };
 
 class TMeshletModelGPU

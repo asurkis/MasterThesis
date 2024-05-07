@@ -21,13 +21,18 @@ TVertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
 [OutputTopology("line")]
 [numthreads(12, 1, 1)]
 void main(
-    in payload TPayload payload,
+    in payload TPayload Payload,
     uint gid : SV_GroupID,
     uint gtid : SV_GroupThreadID,
     out indices uint2 lines[12],
     out vertices TVertexOut verts[8])
 {
-    uint iMeshlet = payload.MeshletIndex[gid];
+    float4x4 MatTransform = Payload.MatTransform;
+    float4x4 MatTransView = mul(MatTransform, MainCB.MatView);
+    float4x4 MatTransViewProj = mul(MatTransform, MainCB.MatViewProj);
+    float4x4 MatTransNormal = mul(MatTransform, MainCB.MatNormal);
+
+    uint iMeshlet = Payload.MeshletIndex[gid];
     TMeshlet m = Meshlets[iMeshlet];
     TBoundingBox box = MeshletBoxes[iMeshlet];
 
@@ -41,8 +46,8 @@ void main(
         ogPos.z = gtid & 4 ? box.Max.z : box.Min.z;
 
         TVertexOut vout;
-        vout.PositionVS = mul(float4(ogPos, 1), MainCB.MatView).xyz;
-        vout.PositionHS = mul(float4(ogPos, 1), MainCB.MatViewProj);
+        vout.PositionVS = mul(float4(ogPos, 1), MatTransView).xyz;
+        vout.PositionHS = mul(float4(ogPos, 1), MatTransViewProj);
         vout.MeshletIndex = iMeshlet;
         verts[gtid] = vout;
     }
