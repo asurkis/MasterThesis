@@ -48,12 +48,12 @@ bool IsEnough(float err, TBoundingBox box, out float VisibleRadius)
     return r < MainCB.FloatInfo.w;
 }
 
-bool ShouldDisplay(uint iMeshlet, out float VisibleRadius)
+bool ShouldDisplay(uint iMeshlet, out TMeshlet meshlet, out float VisibleRadius)
 {
     if (iMeshlet >= MeshInfo.MeshletCount)
         return false;
     
-    TMeshlet meshlet = Meshlets[iMeshlet];
+    meshlet = Meshlets[iMeshlet];
     TBoundingBox box = MeshletBoxes[iMeshlet];
     if (MainCB.IntInfo.z != 0xFFFFFFFF)
     {
@@ -96,7 +96,8 @@ void main(
     float3 pos = iPos * MainCB.FloatInfo.xyz;
     MeshPosition = pos;
     float VisibleRadius = 0.0f;
-    bool shouldDisplay = ShouldDisplay(iMeshlet, VisibleRadius);
+    TMeshlet meshlet;
+    bool shouldDisplay = ShouldDisplay(iMeshlet, meshlet, VisibleRadius);
     
     uint current = WavePrefixCountBits(shouldDisplay);
     uint nDispatch = WaveActiveCountBits(shouldDisplay);
@@ -105,11 +106,12 @@ void main(
     p.Position = float4(pos, 1);
     if (shouldDisplay)
     {
-        p.MeshletIndex[current] = iMeshlet;
+        p.Meshlets[current] = meshlet;
         p.AdditionalInfo[current].x = VisibleRadius;
         p.AdditionalInfo[current].y = MainCB.FloatInfo.w;
         p.AdditionalInfo[current].z = VisibleRadius < MainCB.FloatInfo.w ? 0.0f : 1.0f;
         p.AdditionalInfo[current].w = 0.0f;
+        p.MeshletIndex[current] = iMeshlet;
     }
     DispatchMesh(nDispatch, 1, 1, p);
 }

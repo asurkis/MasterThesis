@@ -20,6 +20,9 @@ enum SrvDescriptors
 PDescriptorHeap pSrvHeap;
 UINT            srvDescSize;
 
+ComPtr<ID3D12QueryHeap> pQueryHeap;
+PResource               pQueryResults;
+
 #ifdef USE_MONO_LODS
 TMonoPipeline mainPipeline;
 
@@ -28,17 +31,17 @@ TMeshletPipeline mainPipeline;
 TMeshletPipeline aabbPipeline;
 #endif
 
-XMVECTOR camFocus  = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
-float    camRotX   = XMConvertToRadians(0.0f);
-float    camRotY   = XMConvertToRadians(0.0f);
-float    camSpeed  = 10.0f;
+XMVECTOR camFocus  = XMVectorSet(-140.0f, 2010.0f, -150.0f, 0.0f);
+float    camRotX   = XMConvertToRadians(-30.0f);
+float    camRotY   = XMConvertToRadians(50.0f);
+float    camSpeed  = 256.0f;
 float    camOffset = 3.0f;
 
 float errorThreshold = 0.25f;
 int   displayType    = -1;
 
-float3 instanceOffset = float3(10.0f, 10.0f, 10.0f);
-int    nInstances     = 1;
+int    nInstances     = 64;
+float3 instanceOffset = float3(400.0f, 600.0f, 400.0f);
 
 #ifndef USE_MONO_LODS
 bool drawModel       = true;
@@ -84,6 +87,24 @@ static void LoadAssets()
                                                        D3D12_RESOURCE_STATE_GENERIC_READ,
                                                        nullptr,
                                                        IID_PPV_ARGS(&pMainCB)));
+    }
+
+    {
+        D3D12_QUERY_HEAP_DESC desc = {};
+        desc.Type                  = D3D12_QUERY_HEAP_TYPE_PIPELINE_STATISTICS;
+        desc.Count                 = 1;
+        ThrowIfFailed(pDevice->CreateQueryHeap(&desc, IID_PPV_ARGS(&pQueryHeap)));
+    }
+
+    {
+        CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_READBACK);
+        auto                    desc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS));
+        ThrowIfFailed(pDevice->CreateCommittedResource(&heapProps,
+                                                       D3D12_HEAP_FLAG_NONE,
+                                                       &desc,
+                                                       D3D12_RESOURCE_STATE_COMMON,
+                                                       nullptr,
+                                                       IID_PPV_ARGS(&pQueryResults)));
     }
 
 #ifdef USE_MONO_LODS
@@ -166,10 +187,15 @@ static void FillCommandList()
     pCommandList->RSSetViewports(1, &viewport);
     pCommandList->RSSetScissorRects(1, &scissorRect);
 
-    auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(pRenderTargets[curFrame].Get(),
-                                                        D3D12_RESOURCE_STATE_PRESENT,
-                                                        D3D12_RESOURCE_STATE_RENDER_TARGET);
-    pCommandList->ResourceBarrier(1, &barrier);
+    CD3DX12_RESOURCE_BARRIER barriers[2];
+
+    barriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(pRenderTargets[curFrame].Get(),
+                                                       D3D12_RESOURCE_STATE_PRESENT,
+                                                       D3D12_RESOURCE_STATE_RENDER_TARGET);
+    barriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(pQueryResults.Get(),
+                                                       D3D12_RESOURCE_STATE_COMMON,
+                                                       D3D12_RESOURCE_STATE_COPY_DEST);
+    pCommandList->ResourceBarrier(2, barriers);
 
     CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(pRtvHeap->GetCPUDescriptorHandleForHeapStart(), curFrame, rtvDescSize);
     CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(pDsvHeap->GetCPUDescriptorHandleForHeapStart());
@@ -181,6 +207,9 @@ static void FillCommandList()
 
     pCommandList->SetGraphicsRootSignature(mainPipeline.GetRootSignatureRaw());
     pCommandList->SetGraphicsRootConstantBufferView(0, pMainCB->GetGPUVirtualAddress());
+
+    pCommandList->BeginQuery(pQueryHeap.Get(), D3D12_QUERY_TYPE_PIPELINE_STATISTICS, 0);
+
 #ifdef USE_MONO_LODS
     model.Reset(displayType);
     for (int i = 0; i < nInstances; ++i)
@@ -204,13 +233,20 @@ static void FillCommandList()
     }
 #endif
 
+    pCommandList->EndQuery(pQueryHeap.Get(), D3D12_QUERY_TYPE_PIPELINE_STATISTICS, 0);
+    pCommandList
+        ->ResolveQueryData(pQueryHeap.Get(), D3D12_QUERY_TYPE_PIPELINE_STATISTICS, 0, 1, pQueryResults.Get(), 0);
+
     ImGui::Render();
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCommandList.Get());
 
-    barrier = CD3DX12_RESOURCE_BARRIER::Transition(pRenderTargets[curFrame].Get(),
-                                                   D3D12_RESOURCE_STATE_RENDER_TARGET,
-                                                   D3D12_RESOURCE_STATE_PRESENT);
-    pCommandList->ResourceBarrier(1, &barrier);
+    barriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(pRenderTargets[curFrame].Get(),
+                                                       D3D12_RESOURCE_STATE_RENDER_TARGET,
+                                                       D3D12_RESOURCE_STATE_PRESENT);
+    barriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(pQueryResults.Get(),
+                                                       D3D12_RESOURCE_STATE_COPY_DEST,
+                                                       D3D12_RESOURCE_STATE_COMMON);
+    pCommandList->ResourceBarrier(2, barriers);
 
     ThrowIfFailed(pCommandList->Close());
 }
@@ -225,6 +261,15 @@ static void OnRender()
 
     ImGui::Begin("Info");
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+    {
+        void         *pResultsBegin = nullptr;
+        CD3DX12_RANGE readRange(0, sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS));
+        ThrowIfFailed(pQueryResults->Map(0, &readRange, &pResultsBegin));
+        auto pStats = reinterpret_cast<D3D12_QUERY_DATA_PIPELINE_STATISTICS *>(pResultsBegin);
+        ImGui::Text("Primitives invoked: %d", pStats->CInvocations);
+        ImGui::Text("Of them rendered: %d", pStats->CPrimitives);
+        pQueryResults->Unmap(0, nullptr);
+    }
     ImGui::Checkbox("VSync", &useVSync);
     if (ImGui::CollapsingHeader("Camera"))
     {

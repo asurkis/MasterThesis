@@ -1,10 +1,5 @@
 #include "AABB_Common.hlsli"
 
-uint GetVertexIndex(TMeshlet m, uint localIndex)
-{
-    return GlobalIndices[m.VertOffset + localIndex];
-}
-
 TVertexOut GetVertexAttributes(uint meshletIndex, uint vertexIndex)
 {
     TVertex v = Vertices[vertexIndex];

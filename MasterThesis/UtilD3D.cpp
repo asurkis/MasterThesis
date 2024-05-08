@@ -82,8 +82,8 @@ static void CreateDepthBuffer(UINT width, UINT height)
 
 void LoadPipeline(UINT width, UINT height)
 {
-// #ifdef _DEBUG
-#if true
+#ifdef _DEBUG
+    // #if true
     {
         ComPtr<ID3D12Debug> debugController;
         if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
@@ -557,7 +557,8 @@ void TMonoModelGPU::Commit()
     CD3DX12_RANGE readRange(0, 0);
     ThrowIfFailed(pInstanceBuffer->Map(0, &readRange, &pInstanceDataBegin));
     memcpy(pInstanceDataBegin, mInstancesOrdered.data(), sizeof(float3) * mNInstances);
-    pInstanceBuffer->Unmap(0, nullptr);
+    CD3DX12_RANGE writtenRange(0, sizeof(float3) * mNInstances);
+    pInstanceBuffer->Unmap(0, &writtenRange);
 
     pCommandList->IASetVertexBuffers(1, 1, &mInstanceBufferView);
     for (size_t iLod = 0; iLod < LodCount(); ++iLod)
@@ -587,7 +588,7 @@ void TMonoModelGPU::Commit()
 void TMeshletModelGPU::Upload(const TMeshletModelCPU &model)
 {
     PResource pUploadVertices;
-    PResource pUploadGlobalIndices;
+    // PResource pUploadGlobalIndices;
     PResource pUploadPrimitives;
     PResource pUploadMeshlets;
     PResource pUploadMeshletBoxes;
@@ -595,8 +596,28 @@ void TMeshletModelGPU::Upload(const TMeshletModelCPU &model)
     meshes = model.Meshes;
 
     ThrowIfFailed(pCommandList->Reset(pCommandAllocator.Get(), nullptr));
-    QueryUploadVector(model.Vertices, &pVertices, &pUploadVertices);
-    QueryUploadVector(model.GlobalIndices, &pGlobalIndices, &pUploadGlobalIndices);
+
+    std::vector<TVertex> appliedVertices;
+    appliedVertices.reserve(model.GlobalIndices.size());
+    for (uint iVert : model.GlobalIndices)
+        appliedVertices.push_back(model.Vertices[iVert & UINT32_C(0x7FFFFFFF)]);
+
+    uint MaxVertCount = 0;
+    uint MaxPrimCount = 0;
+    for (const TMeshletDesc &meshlet : model.Meshlets)
+    {
+        MaxVertCount = XMMax(MaxVertCount, meshlet.VertCount);
+        MaxPrimCount = XMMax(MaxPrimCount, meshlet.PrimCount);
+    }
+    {
+        std::wstringstream oss;
+        oss << L"MaxVertCount = " << MaxVertCount << L"\nMaxPrimCount = " << MaxPrimCount << L"\n";
+        std::wstring str = oss.str();
+        OutputDebugStringW(str.c_str());
+    }
+
+    QueryUploadVector(appliedVertices, &pVertices, &pUploadVertices);
+    // QueryUploadVector(model.GlobalIndices, &pGlobalIndices, &pUploadGlobalIndices);
     QueryUploadVector(model.Primitives, &pPrimitives, &pUploadPrimitives);
     QueryUploadVector(model.Meshlets, &pMeshlets, &pUploadMeshlets);
     QueryUploadVector(model.MeshletBoxes, &pMeshletBoxes, &pUploadMeshletBoxes);
@@ -633,7 +654,7 @@ void TMeshletModelGPU::Render(int nInstances)
         pCommandList->SetGraphicsRoot32BitConstant(1, mesh.MeshletCount, 0);
         pCommandList->SetGraphicsRoot32BitConstant(1, mesh.MeshletTriangleOffsets, 1);
         pCommandList->SetGraphicsRootShaderResourceView(2, pVertices->GetGPUVirtualAddress());
-        pCommandList->SetGraphicsRootShaderResourceView(3, pGlobalIndices->GetGPUVirtualAddress());
+        // pCommandList->SetGraphicsRootShaderResourceView(3, pGlobalIndices->GetGPUVirtualAddress());
         pCommandList->SetGraphicsRootShaderResourceView(4, pPrimitives->GetGPUVirtualAddress());
         pCommandList->SetGraphicsRootShaderResourceView(5, pMeshlets->GetGPUVirtualAddress());
         pCommandList->SetGraphicsRootShaderResourceView(6, pMeshletBoxes->GetGPUVirtualAddress());

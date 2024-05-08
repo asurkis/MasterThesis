@@ -1,7 +1,5 @@
 #include "MainCommon.hlsli"
 
-#define GROUP_SIZE 128
-
 groupshared TMeshlet Meshlet;
 
 uint3 UnpackPrimitive(uint primitive)
@@ -16,24 +14,19 @@ uint3 GetPrimitive(uint index)
     return UnpackPrimitive(prim);
 }
 
-uint GetVertexIndex(uint localIndex)
-{
-    return GlobalIndices[Meshlet.VertOffset + localIndex];
-}
+// uint GetVertexIndex(uint localIndex)
+// {
+//     return GlobalIndices[Meshlet.VertOffset + localIndex];
+// }
 
 TVertexOut GetVertexAttributes(float3 pos, uint iLocVert)
 {
-    uint iParent = Meshlet.ParentOffset;
-    uint iVert = GetVertexIndex(iLocVert);
-    bool isBorder = (iVert & 0x80000000) != 0;
-    iVert &= 0x7FFFFFFF;
-    TVertex v = Vertices[iVert];
-
+    TVertex v = Vertices[Meshlet.VertOffset + iLocVert];
     TVertexOut vout;
     vout.PositionVS = mul(float4(v.Position + pos, 1), MainCB.MatView).xyz;
     vout.PositionHS = mul(float4(v.Position + pos, 1), MainCB.MatViewProj);
     vout.Normal = mul(float4(v.Normal, 0), MainCB.MatNormal).xyz;
-    
+
     /*
     if (MeshInfo.DisplayType == 0xFFFFFFFF)
     {
@@ -66,16 +59,15 @@ TVertexOut GetVertexAttributes(float3 pos, uint iLocVert)
 
 [RootSignature(ROOT_SIG)]
 [OutputTopology("triangle")]
-[numthreads(GROUP_SIZE, 1, 1)]
+[numthreads(128, 1, 1)]
 void main(
     in payload TPayload Payload,
     uint gid : SV_GroupID,
     uint gtid : SV_GroupThreadID,
-    out indices uint3 tris[128],
-    out vertices TVertexOut verts[256])
+    out vertices TVertexOut verts[128],
+    out indices uint3 tris[128])
 {
-    uint iMeshlet = Payload.MeshletIndex[gid];
-    Meshlet = Meshlets[iMeshlet];
+    Meshlet = Payload.Meshlets[gid];
     SetMeshOutputCounts(Meshlet.VertCount, Meshlet.PrimCount);
 
     if (gtid < Meshlet.PrimCount)
@@ -88,7 +80,7 @@ void main(
     if (iLocVert < Meshlet.VertCount)
         verts[iLocVert] = GetVertexAttributes(Payload.Position.xyz, iLocVert);
     
-    iLocVert = gtid + 128;
-    if (iLocVert < Meshlet.VertCount)
-        verts[iLocVert] = GetVertexAttributes(Payload.Position.xyz, iLocVert);
+    //iLocVert = gtid + 128;
+    //if (iLocVert < Meshlet.VertCount)
+    //    verts[iLocVert] = GetVertexAttributes(Payload.Position.xyz, iLocVert);
 }
