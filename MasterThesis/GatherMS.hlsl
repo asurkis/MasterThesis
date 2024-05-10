@@ -1,7 +1,12 @@
-#include "CommonASMS.hlsli"
+#include "Util.hlsli"
 #include "MainCommon.hlsli"
 
-groupshared TMeshlet Meshlet;
+ConstantBuffer<TMainCB> MainCB : register(b0);
+StructuredBuffer<TVertex> Vertices : register(t0);
+StructuredBuffer<uint> Primitives : register(t1);
+StructuredBuffer<TInstancedMeshlet> InstancedMeshlets : register(t2);
+
+groupshared TInstancedMeshlet Meshlet;
 
 uint3 UnpackPrimitive(uint primitive)
 {
@@ -14,11 +19,6 @@ uint3 GetPrimitive(uint index)
     uint prim = Primitives[Meshlet.Prim.Offset + index];
     return UnpackPrimitive(prim);
 }
-
-// uint GetVertexIndex(uint localIndex)
-// {
-//     return GlobalIndices[Meshlet.VertOffset + localIndex];
-// }
 
 TVertexOut GetVertexAttributes(float3 pos, uint iLocVert)
 {
@@ -58,17 +58,21 @@ TVertexOut GetVertexAttributes(float3 pos, uint iLocVert)
     return vout;
 }
 
-[RootSignature(ROOT_SIG)]
+[RootSignature(
+    "CBV(b0),"
+    "SRV(t0),"
+    "SRV(t1),"
+    "SRV(t2)"
+)]
 [OutputTopology("triangle")]
 [numthreads(128, 1, 1)]
 void main(
-    in payload TPayload Payload,
     uint gid : SV_GroupID,
     uint gtid : SV_GroupThreadID,
     out vertices TVertexOut verts[128],
     out indices uint3 tris[128])
 {
-    Meshlet = Payload.Meshlets[gid];
+    Meshlet = InstancedMeshlets[gid];
     SetMeshOutputCounts(Meshlet.Vert.Count, Meshlet.Prim.Count);
 
     if (gtid < Meshlet.Prim.Count)
@@ -79,7 +83,7 @@ void main(
     // Повторим код 2 раза, чтобы не было менее предсказуемого цикла
     iLocVert = gtid;
     if (iLocVert < Meshlet.Vert.Count)
-        verts[iLocVert] = GetVertexAttributes(Payload.Position.xyz, iLocVert);
+        verts[iLocVert] = GetVertexAttributes(Meshlet.Position, iLocVert);
     
     //iLocVert = gtid + 128;
     //if (iLocVert < Meshlet.VertCount)

@@ -355,16 +355,13 @@ void TMeshletPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeAS,
                                     const std::vector<BYTE> &bytecodeMS,
                                     const std::vector<BYTE> &bytecodePS)
 {
-    PPipelineState pPipelineStateDirect;
-    PRootSignature pRootSignatureDirect;
-    PPipelineState pPipelineStateCompute;
-    PRootSignature pRootSignatureCompute;
+    PPipelineState pPipelineState;
+    PRootSignature pRootSignature;
 
-    ThrowIfFailed(
-        pDevice->CreateRootSignature(0, bytecodeMS.data(), bytecodeMS.size(), IID_PPV_ARGS(&pRootSignatureDirect)));
+    ThrowIfFailed(pDevice->CreateRootSignature(0, bytecodeMS.data(), bytecodeMS.size(), IID_PPV_ARGS(&pRootSignature)));
 
     D3DX12_MESH_SHADER_PIPELINE_STATE_DESC psoDesc = {};
-    psoDesc.pRootSignature                         = pRootSignatureDirect.Get();
+    psoDesc.pRootSignature                         = pRootSignature.Get();
     psoDesc.AS.pShaderBytecode                     = bytecodeAS.data();
     psoDesc.AS.BytecodeLength                      = bytecodeAS.size();
     psoDesc.MS.pShaderBytecode                     = bytecodeMS.data();
@@ -393,13 +390,10 @@ void TMeshletPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeAS,
     streamDesc.pPipelineStateSubobjectStream    = &psoStream;
     streamDesc.SizeInBytes                      = sizeof(psoStream);
 
-    ThrowIfFailed(pDevice->CreatePipelineState(&streamDesc, IID_PPV_ARGS(&pPipelineStateDirect)));
+    ThrowIfFailed(pDevice->CreatePipelineState(&streamDesc, IID_PPV_ARGS(&pPipelineState)));
 
-    this->pPipelineState = std::move(pPipelineStateDirect);
-    this->pRootSignature = std::move(pRootSignatureDirect);
-
-    this->pPipelineStateCompute = std::move(pPipelineStateCompute);
-    this->pRootSignatureCompute = std::move(pRootSignatureCompute);
+    this->pPipelineState = std::move(pPipelineState);
+    this->pRootSignature = std::move(pRootSignature);
 }
 
 void TMeshletPipeline::Load(const std::filesystem::path &pathMS, const std::filesystem::path &pathPS)
@@ -624,10 +618,11 @@ void TMonoModelGPU::Commit()
 void TMeshletModelGPU::Upload(const TMeshletModelCPU &model, uint nMaxInstances)
 {
     PResource pUploadVertices;
-    // PResource pUploadGlobalIndices;
     PResource pUploadPrimitives;
     PResource pUploadMeshlets;
     PResource pUploadMeshletBoxes;
+    PResource pUploadParents;
+    PResource pUploadChildren;
 
     mMeshes = model.Meshes;
 
@@ -646,6 +641,35 @@ void TMeshletModelGPU::Upload(const TMeshletModelCPU &model, uint nMaxInstances)
             mRoots.push_back(iMeshlet);
     }
 
+    // x = count, y = offset
+    std::vector<uint2> parentDescs(model.Meshlets.size(), uint2(0, 0));
+    std::vector<uint>  children;
+    for (const TMeshletDesc &meshlet : model.Meshlets)
+    {
+        for (size_t iiParent = 0; iiParent < meshlet.ParentCount; ++iiParent)
+        {
+            size_t iParent = meshlet.ParentOffset + iiParent;
+            parentDescs[iParent].x++;
+            children.push_back(0);
+        }
+    }
+    for (size_t i = 1; i < model.Meshlets.size(); ++i)
+    {
+        parentDescs[i].y     = parentDescs[i - 1].x + parentDescs[i - 1].y;
+        parentDescs[i - 1].x = 0;
+    }
+    parentDescs[model.Meshlets.size() - 1].x = 0;
+    for (size_t iMeshlet = 0; iMeshlet < model.Meshlets.size(); ++iMeshlet)
+    {
+        const TMeshletDesc &meshlet = model.Meshlets[iMeshlet];
+        for (uint iiParent = 0; iiParent < meshlet.ParentCount; ++iiParent)
+        {
+            uint iParent  = meshlet.ParentOffset + iiParent;
+            uint pos      = parentDescs[iParent].x++ + parentDescs[iParent].y;
+            children[pos] = iMeshlet;
+        }
+    }
+
     uint MaxVertCount = 0;
     uint MaxPrimCount = 0;
     for (const TMeshletDesc &meshlet : model.Meshlets)
@@ -661,16 +685,20 @@ void TMeshletModelGPU::Upload(const TMeshletModelCPU &model, uint nMaxInstances)
     }
 
     QueryUploadVector(appliedVertices, &pVertices, &pUploadVertices);
-    // QueryUploadVector(model.GlobalIndices, &pGlobalIndices, &pUploadGlobalIndices);
     QueryUploadVector(model.Primitives, &pPrimitives, &pUploadPrimitives);
     QueryUploadVector(model.Meshlets, &pMeshlets, &pUploadMeshlets);
     QueryUploadVector(model.MeshletBoxes, &pMeshletBoxes, &pUploadMeshletBoxes);
+    QueryUploadVector(parentDescs, &pParents, &pUploadParents);
+    QueryUploadVector(children, &pChildren, &pUploadChildren);
     ThrowIfFailed(pCommandListDirect->Close());
     ExecuteCommandList();
 
     uint nMaxMeshlets = nMaxInstances * model.Meshlets.size();
-    pTasks            = CreateGenericBuffer(16);
+    pTasks            = CreateGenericBuffer(20);
     pQueue            = CreateGenericBuffer(sizeof(uint) * nMaxMeshlets);
+
+    pInstancedMeshlets
+        = CreateGenericBuffer(sizeof(uint4[2]) * nMaxMeshlets, D3D12_RESOURCE_STATE_COMMON, D3D12_HEAP_TYPE_DEFAULT);
 
     TFence fence;
     fence.Init(pCommandQueueDirect);
@@ -707,9 +735,17 @@ void TMeshletModelGPU::Reset(uint nInstances)
         pTasks[1]   = nInstances * mRoots.size();
         pTasks[2]   = pTasks[1];
         pTasks[3]   = 0;
+        pTasks[4]   = 0;
     }
     pTasks->Unmap(0, nullptr);
 
+    pCommandListCompute->SetComputeRootShaderResourceView(1, pMeshlets->GetGPUVirtualAddress());
+    pCommandListCompute->SetComputeRootShaderResourceView(2, pMeshletBoxes->GetGPUVirtualAddress());
+    pCommandListCompute->SetComputeRootShaderResourceView(3, pParents->GetGPUVirtualAddress());
+    pCommandListCompute->SetComputeRootShaderResourceView(4, pChildren->GetGPUVirtualAddress());
+    pCommandListCompute->SetComputeRootUnorderedAccessView(5, pTasks->GetGPUVirtualAddress());
+    pCommandListCompute->SetComputeRootUnorderedAccessView(6, pQueue->GetGPUVirtualAddress());
+    pCommandListCompute->SetComputeRootUnorderedAccessView(7, pInstancedMeshlets->GetGPUVirtualAddress());
     // Подобрать такую константу, чтобы хватило на загрузку видеокарты
     pCommandListCompute->Dispatch(256, 1, 1);
 
@@ -717,10 +753,15 @@ void TMeshletModelGPU::Reset(uint nInstances)
     ID3D12CommandList *ppCommandLists[] = {pCommandListCompute.Get()};
     pCommandQueueCompute->ExecuteCommandLists(1, ppCommandLists);
     computeFence.Wait();
+
+    ThrowIfFailed(pTasks->Map(0, nullptr, &pMapped));
+    mNInstancedMeshlets = reinterpret_cast<uint *>(pMapped)[4];
+    pTasks->Unmap(0, nullptr);
 }
 
 void TMeshletModelGPU::Render(int nInstances)
 {
+    /*
     for (uint iMesh = 0; iMesh < mMeshes.size(); ++iMesh)
     {
         TMeshDesc &mesh = mMeshes[iMesh];
@@ -737,4 +778,9 @@ void TMeshletModelGPU::Render(int nInstances)
         uint nDispatch = (mesh.MeshletCount + GROUP_SIZE_AS - 1) / GROUP_SIZE_AS;
         pCommandListDirect->DispatchMesh(nDispatch, nInstances, 1);
     }
+    */
+    pCommandListDirect->SetGraphicsRootShaderResourceView(1, pVertices->GetGPUVirtualAddress());
+    pCommandListDirect->SetGraphicsRootShaderResourceView(2, pPrimitives->GetGPUVirtualAddress());
+    pCommandListDirect->SetGraphicsRootShaderResourceView(3, pInstancedMeshlets->GetGPUVirtualAddress());
+    pCommandListDirect->DispatchMesh(mNInstancedMeshlets, 1, 1);
 }

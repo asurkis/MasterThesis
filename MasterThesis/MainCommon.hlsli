@@ -1,7 +1,5 @@
 #pragma once
 
-#include "CommonASMS.hlsli"
-
 struct TVertexOut
 {
     float4 PositionHS : SV_Position;

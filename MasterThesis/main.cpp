@@ -75,9 +75,10 @@ static void LoadAssets()
 #ifdef USE_MONO_LODS
     mainPipeline.Load(assetPath / "MainVS.cso", assetPath / "MainPS.cso");
 #else
-    mainPipeline.Load(assetPath / "MainMS.cso", assetPath / "MainPS.cso", assetPath / "MainAS.cso");
-    aabbPipeline.Load(assetPath / "AABB_MS.cso", assetPath / "AABB_PS.cso", assetPath / "MainAS.cso");
-    computePipeline.Load(assetPath / "MainCS.cso");
+    mainPipeline.Load(assetPath / "GatherMS.cso", assetPath / "MainPS.cso");
+    // mainPipeline.Load(assetPath / "MainMS.cso", assetPath / "MainPS.cso", assetPath / "MainAS.cso");
+    // aabbPipeline.Load(assetPath / "AABB_MS.cso", assetPath / "AABB_PS.cso", assetPath / "MainAS.cso");
+    computePipeline.Load(assetPath / "GatherCS.cso");
 #endif
 
     pMainCB = CreateGenericBuffer(sizeof(MainData));
@@ -209,6 +210,8 @@ static void FillCommandList()
 #else
     ThrowIfFailed(pCommandAllocatorCompute->Reset());
     ThrowIfFailed(pCommandListCompute->Reset(pCommandAllocatorCompute.Get(), computePipeline.GetStateRaw()));
+    pCommandListCompute->SetComputeRootSignature(computePipeline.GetRootSignatureRaw());
+    pCommandListCompute->SetComputeRootConstantBufferView(0, pMainCB->GetGPUVirtualAddress());
     model.Reset(nInstances);
 
     if (drawModel)

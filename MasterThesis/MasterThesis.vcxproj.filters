@@ -78,7 +78,10 @@
     <FxCompile Include="MainVS.hlsl">
       <Filter>Файлы ресурсов\Шейдеры</Filter>
     </FxCompile>
-    <FxCompile Include="MainCS.hlsl">
+    <FxCompile Include="GatherCS.hlsl">
+      <Filter>Файлы ресурсов\Шейдеры</Filter>
+    </FxCompile>
+    <FxCompile Include="GatherMS.hlsl">
       <Filter>Файлы ресурсов\Шейдеры</Filter>
     </FxCompile>
   </ItemGroup>

@@ -36,7 +36,7 @@ struct TInstancedMeshlet
 {
     TIndexSpan Vert;
     TIndexSpan Prim;
-    float3 Pos;
+    float3 Position;
 };
 
 struct TBoundingBox

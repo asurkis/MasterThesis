@@ -145,17 +145,20 @@ class TMeshletModelGPU
     PResource pPrimitives;
     PResource pMeshlets;
     PResource pMeshletBoxes;
+    PResource pParents;
+    PResource pChildren;
 
     PResource pTasks;
     PResource pQueue;
-    PResource pParents;
-    PResource pChildren;
+    PResource pInstancedMeshlets;
 
     uint mMaxLayer;
 
     // Пока поддерживаем отрисовку только одного меша за раз
     std::vector<TMeshDesc> mMeshes;
     std::vector<uint>      mRoots;
+
+    uint mNInstancedMeshlets = 0;
 
   public:
     constexpr uint MaxLayer() const noexcept { return mMaxLayer; }

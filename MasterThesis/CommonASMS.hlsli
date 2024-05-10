@@ -19,14 +19,12 @@ struct TPayload
     "SRV(t0),"                                                                                                         \
     "SRV(t1),"                                                                                                         \
     "SRV(t2),"                                                                                                         \
-    "SRV(t3),"                                                                                                         \
-    "SRV(t4)"
+    "SRV(t3)"
 
 ConstantBuffer<TMainCB> MainCB : register(b0);
 ConstantBuffer<TMesh> MeshInfo : register(b1);
 
 StructuredBuffer<TVertex> Vertices : register(t0);
-StructuredBuffer<uint> GlobalIndices : register(t1);
-StructuredBuffer<uint> Primitives : register(t2);
-StructuredBuffer<TMeshlet> Meshlets : register(t3);
-StructuredBuffer<TBoundingBox> MeshletBoxes : register(t4);
+StructuredBuffer<uint> Primitives : register(t1);
+StructuredBuffer<TMeshlet> Meshlets : register(t2);
+StructuredBuffer<TBoundingBox> MeshletBoxes : register(t3);

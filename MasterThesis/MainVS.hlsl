@@ -1,3 +1,4 @@
+#include "CommonASMS.hlsli"
 #include "MainCommon.hlsli"
 
 [RootSignature("RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT),CBV(b0)")]
