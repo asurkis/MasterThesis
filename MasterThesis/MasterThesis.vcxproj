@@ -196,6 +196,7 @@
     <None Include="AABB_Common.hlsli" />
     <None Include="MainCommon.hlsli" />
     <None Include="Util.hlsli" />
+    <None Include="CommonASMS.hlsli" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="AABB_MS.hlsl">
@@ -215,6 +216,12 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Amplification</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Amplification</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Amplification</ShaderType>
+    </FxCompile>
+    <FxCompile Include="MainCS.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Compute</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compute</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Compute</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compute</ShaderType>
     </FxCompile>
     <FxCompile Include="MainMS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Mesh</ShaderType>

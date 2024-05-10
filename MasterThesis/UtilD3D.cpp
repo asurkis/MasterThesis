@@ -7,9 +7,42 @@ using namespace DirectX;
 
 bool useWarpDevice = false;
 
-inline PFence      pFrameFence[FRAME_COUNT];
-inline UINT64      nextFenceValue[FRAME_COUNT];
-inline TRaiiHandle hFenceEvent[FRAME_COUNT];
+struct TFence
+{
+    PCommandQueue       pCommandQueue;
+    ComPtr<ID3D12Fence> pFence;
+    UINT64              nextValue;
+    TRaiiHandle         hFenceEvent;
+
+    void Init(PCommandQueue pCommandQueue)
+    {
+        this->pCommandQueue = pCommandQueue;
+
+        ThrowIfFailed(pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&pFence)));
+        nextValue = 1;
+
+        hFenceEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (!hFenceEvent.Get())
+            ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
+    }
+
+    void Wait()
+    {
+        UINT64 value  = nextValue++;
+        HANDLE hEvent = hFenceEvent.Get();
+
+        ThrowIfFailed(pCommandQueue->Signal(pFence.Get(), value));
+
+        if (pFence->GetCompletedValue() < value)
+        {
+            ThrowIfFailed(pFence->SetEventOnCompletion(value, hEvent));
+            WaitForSingleObject(hEvent, INFINITE);
+        }
+    }
+};
+
+TFence frameFences[FRAME_COUNT];
+TFence computeFence;
 
 static ComPtr<IDXGIAdapter1> GetHWAdapter(ComPtr<IDXGIFactory1> pFactory1)
 {
@@ -80,10 +113,24 @@ static void CreateDepthBuffer(UINT width, UINT height)
     pDevice->CreateDepthStencilView(pDepthBuffer.Get(), &viewDesc, pDsvHeap->GetCPUDescriptorHandleForHeapStart());
 }
 
+PResource CreateGenericBuffer(UINT64 width, D3D12_RESOURCE_STATES initState, D3D12_HEAP_TYPE heapType)
+{
+    PResource               pBuffer;
+    CD3DX12_HEAP_PROPERTIES heapProps(heapType);
+    auto                    desc = CD3DX12_RESOURCE_DESC::Buffer(width);
+    ThrowIfFailed(pDevice->CreateCommittedResource(&heapProps,
+                                                   D3D12_HEAP_FLAG_NONE,
+                                                   &desc,
+                                                   initState,
+                                                   nullptr,
+                                                   IID_PPV_ARGS(&pBuffer)));
+    return std::move(pBuffer);
+}
+
 void LoadPipeline(UINT width, UINT height)
 {
-#ifdef _DEBUG
-    // #if true
+    // #ifdef _DEBUG
+#if true
     {
         ComPtr<ID3D12Debug> debugController;
         if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
@@ -123,6 +170,9 @@ void LoadPipeline(UINT width, UINT height)
     commandQueueDesc.Flags                    = D3D12_COMMAND_QUEUE_FLAG_NONE;
     commandQueueDesc.Type                     = D3D12_COMMAND_LIST_TYPE_DIRECT;
     ThrowIfFailed(pDevice->CreateCommandQueue(&commandQueueDesc, IID_PPV_ARGS(&pCommandQueueDirect)));
+
+    commandQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
+    ThrowIfFailed(pDevice->CreateCommandQueue(&commandQueueDesc, IID_PPV_ARGS(&pCommandQueueCompute)));
 
     DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
     swapChainDesc.BufferCount          = FRAME_COUNT;
@@ -174,62 +224,51 @@ void LoadPipeline(UINT width, UINT height)
 
     CreateDepthBuffer(width, height);
 
-    ThrowIfFailed(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&pCommandAllocator)));
+    ThrowIfFailed(
+        pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&pCommandAllocatorDirect)));
+    ThrowIfFailed(
+        pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COMPUTE, IID_PPV_ARGS(&pCommandAllocatorCompute)));
 
     for (UINT i = 0; i < FRAME_COUNT; ++i)
-    {
-        ThrowIfFailed(pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&pFrameFence[i])));
-        nextFenceValue[i] = 1;
-
-        hFenceEvent[i] = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-        if (!hFenceEvent[i].Get())
-            ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
-    }
+        frameFences[i].Init(pCommandQueueDirect);
+    computeFence.Init(pCommandQueueCompute);
 
     ThrowIfFailed(pDevice->CreateCommandList(0,
                                              D3D12_COMMAND_LIST_TYPE_DIRECT,
-                                             pCommandAllocator.Get(),
+                                             pCommandAllocatorDirect.Get(),
                                              nullptr,
-                                             IID_PPV_ARGS(&pCommandList)));
-    ThrowIfFailed(pCommandList->Close());
-}
+                                             IID_PPV_ARGS(&pCommandListDirect)));
+    ThrowIfFailed(pCommandListDirect->Close());
 
-static void WaitForFrame(UINT frame)
-{
-    UINT64       value  = nextFenceValue[frame]++;
-    ID3D12Fence *pFence = pFrameFence[frame].Get();
-    HANDLE       hEvent = hFenceEvent->Get();
-
-    ThrowIfFailed(pCommandQueueDirect->Signal(pFence, value));
-
-    if (pFence->GetCompletedValue() < value)
-    {
-        ThrowIfFailed(pFence->SetEventOnCompletion(value, hEvent));
-        WaitForSingleObject(hEvent, INFINITE);
-    }
+    ThrowIfFailed(pDevice->CreateCommandList(0,
+                                             D3D12_COMMAND_LIST_TYPE_COMPUTE,
+                                             pCommandAllocatorCompute.Get(),
+                                             nullptr,
+                                             IID_PPV_ARGS(&pCommandListCompute)));
+    ThrowIfFailed(pCommandListCompute->Close());
 }
 
 void WaitForCurFrame()
 {
-    WaitForFrame(curFrame);
+    frameFences[curFrame].Wait();
     curFrame = pSwapChain->GetCurrentBackBufferIndex();
 }
 
 void WaitForLastFrame()
 {
     curFrame = pSwapChain->GetCurrentBackBufferIndex();
-    WaitForFrame(curFrame);
+    frameFences[curFrame].Wait();
 }
 
 void WaitForAllFrames()
 {
     for (UINT i = 0; i < FRAME_COUNT; ++i)
-        WaitForFrame(i);
+        frameFences[i].Wait();
 }
 
 void ExecuteCommandList()
 {
-    ID3D12CommandList *ppCommandLists[] = {pCommandList.Get()};
+    ID3D12CommandList *ppCommandLists[] = {pCommandListDirect.Get()};
     pCommandQueueDirect->ExecuteCommandLists(1, ppCommandLists);
 }
 
@@ -292,7 +331,7 @@ void TMonoPipeline::Load(const std::filesystem::path &pathVS, const std::filesys
     psoDesc.BlendState                         = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
     psoDesc.SampleMask                         = UINT_MAX;
     psoDesc.RasterizerState                    = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-    psoDesc.RasterizerState.CullMode           = D3D12_CULL_MODE_NONE;
+    psoDesc.RasterizerState.CullMode           = D3D12_CULL_MODE_FRONT;
     psoDesc.DepthStencilState                  = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
     psoDesc.DepthStencilState.DepthFunc        = D3D12_COMPARISON_FUNC_GREATER;
     psoDesc.InputLayout.pInputElementDescs     = inputElementDesc;
@@ -316,13 +355,16 @@ void TMeshletPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeAS,
                                     const std::vector<BYTE> &bytecodeMS,
                                     const std::vector<BYTE> &bytecodePS)
 {
-    PPipelineState pPipelineState;
-    PRootSignature pRootSignature;
+    PPipelineState pPipelineStateDirect;
+    PRootSignature pRootSignatureDirect;
+    PPipelineState pPipelineStateCompute;
+    PRootSignature pRootSignatureCompute;
 
-    ThrowIfFailed(pDevice->CreateRootSignature(0, bytecodeMS.data(), bytecodeMS.size(), IID_PPV_ARGS(&pRootSignature)));
+    ThrowIfFailed(
+        pDevice->CreateRootSignature(0, bytecodeMS.data(), bytecodeMS.size(), IID_PPV_ARGS(&pRootSignatureDirect)));
 
     D3DX12_MESH_SHADER_PIPELINE_STATE_DESC psoDesc = {};
-    psoDesc.pRootSignature                         = pRootSignature.Get();
+    psoDesc.pRootSignature                         = pRootSignatureDirect.Get();
     psoDesc.AS.pShaderBytecode                     = bytecodeAS.data();
     psoDesc.AS.BytecodeLength                      = bytecodeAS.size();
     psoDesc.MS.pShaderBytecode                     = bytecodeMS.data();
@@ -351,10 +393,13 @@ void TMeshletPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeAS,
     streamDesc.pPipelineStateSubobjectStream    = &psoStream;
     streamDesc.SizeInBytes                      = sizeof(psoStream);
 
-    ThrowIfFailed(pDevice->CreatePipelineState(&streamDesc, IID_PPV_ARGS(&pPipelineState)));
+    ThrowIfFailed(pDevice->CreatePipelineState(&streamDesc, IID_PPV_ARGS(&pPipelineStateDirect)));
 
-    this->pPipelineState = std::move(pPipelineState);
-    this->pRootSignature = std::move(pRootSignature);
+    this->pPipelineState = std::move(pPipelineStateDirect);
+    this->pRootSignature = std::move(pRootSignatureDirect);
+
+    this->pPipelineStateCompute = std::move(pPipelineStateCompute);
+    this->pRootSignatureCompute = std::move(pRootSignatureCompute);
 }
 
 void TMeshletPipeline::Load(const std::filesystem::path &pathMS, const std::filesystem::path &pathPS)
@@ -374,39 +419,46 @@ void TMeshletPipeline::Load(const std::filesystem::path &pathMS,
     LoadBytecode(dataAS, dataMS, dataPS);
 }
 
+void TComputePipeline::Load(const std::filesystem::path &pathCS)
+{
+    std::vector<BYTE> bytecodeCS = ReadFile(pathCS);
+
+    PPipelineState pPipelineState;
+    PRootSignature pRootSignature;
+
+    ThrowIfFailed(pDevice->CreateRootSignature(0, bytecodeCS.data(), bytecodeCS.size(), IID_PPV_ARGS(&pRootSignature)));
+
+    D3D12_COMPUTE_PIPELINE_STATE_DESC psoDesc = {};
+    psoDesc.pRootSignature                    = pRootSignature.Get();
+    psoDesc.CS.pShaderBytecode                = bytecodeCS.data();
+    psoDesc.CS.BytecodeLength                 = bytecodeCS.size();
+    psoDesc.Flags                             = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+    ThrowIfFailed(pDevice->CreateComputePipelineState(&psoDesc, IID_PPV_ARGS(&pPipelineState)));
+
+    this->pPipelineState = std::move(pPipelineState);
+    this->pRootSignature = std::move(pRootSignature);
+}
+
 template <typename T>
-static void QueryUploadVector(const std::vector<T> &data, PResource *outBuffer, PResource *outUpload)
+static void QueryUploadVector(const std::vector<T> &data, PResource *ppBuffer, PResource *ppUpload)
 {
     size_t dataSize = sizeof(T) * data.size();
     UINT64 bufWidth = (dataSize + 3) / 4 * 4;
-    auto   bufDesc  = CD3DX12_RESOURCE_DESC::Buffer(bufWidth);
 
-    auto defaultHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-    ThrowIfFailed(pDevice->CreateCommittedResource(&defaultHeap,
-                                                   D3D12_HEAP_FLAG_NONE,
-                                                   &bufDesc,
-                                                   D3D12_RESOURCE_STATE_COPY_DEST,
-                                                   nullptr,
-                                                   IID_PPV_ARGS(&*outBuffer)));
-
-    auto uploadHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-    ThrowIfFailed(pDevice->CreateCommittedResource(&uploadHeap,
-                                                   D3D12_HEAP_FLAG_NONE,
-                                                   &bufDesc,
-                                                   D3D12_RESOURCE_STATE_GENERIC_READ,
-                                                   nullptr,
-                                                   IID_PPV_ARGS(&*outUpload)));
+    *ppBuffer = CreateGenericBuffer(bufWidth, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_HEAP_TYPE_DEFAULT);
+    *ppUpload = CreateGenericBuffer(bufWidth);
 
     void *memory = nullptr;
-    ThrowIfFailed((*outUpload)->Map(0, nullptr, &memory));
+    ThrowIfFailed((*ppUpload)->Map(0, nullptr, &memory));
     std::memcpy(memory, data.data(), dataSize);
-    (*outUpload)->Unmap(0, nullptr);
+    (*ppUpload)->Unmap(0, nullptr);
 
-    pCommandList->CopyResource(outBuffer->Get(), outUpload->Get());
-    auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(outBuffer->Get(),
+    pCommandListDirect->CopyResource(ppBuffer->Get(), ppUpload->Get());
+    auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(ppBuffer->Get(),
                                                         D3D12_RESOURCE_STATE_COPY_DEST,
                                                         D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
-    pCommandList->ResourceBarrier(1, &barrier);
+    pCommandListDirect->ResourceBarrier(1, &barrier);
 }
 
 void TMonoLodGPU::Upload(const TMonoLodCPU &model)
@@ -416,24 +468,15 @@ void TMonoLodGPU::Upload(const TMonoLodCPU &model)
 
     mNIndices = model.Indices.size();
 
-    ThrowIfFailed(pCommandList->Reset(pCommandAllocator.Get(), nullptr));
+    ThrowIfFailed(pCommandListDirect->Reset(pCommandAllocatorDirect.Get(), nullptr));
     QueryUploadVector(model.Vertices, &pVertices, &pUploadVertices);
     QueryUploadVector(model.Indices, &pIndices, &pUploadIndices);
-    ThrowIfFailed(pCommandList->Close());
+    ThrowIfFailed(pCommandListDirect->Close());
     ExecuteCommandList();
 
-    PFence pFence;
-    ThrowIfFailed(pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&pFence)));
-    pCommandQueueDirect->Signal(pFence.Get(), 1);
-
-    if (pFence->GetCompletedValue() != 1)
-    {
-        TRaiiHandle hEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-        if (!hEvent.Get())
-            ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
-        pFence->SetEventOnCompletion(1, hEvent.Get());
-        WaitForSingleObjectEx(hEvent.Get(), INFINITE, FALSE);
-    }
+    TFence fence;
+    fence.Init(pCommandQueueDirect);
+    fence.Wait();
 
     mVertexBufferView.BufferLocation = pVertices->GetGPUVirtualAddress();
     mVertexBufferView.SizeInBytes    = sizeof(TVertex) * model.Vertices.size();
@@ -448,10 +491,10 @@ void TMonoLodGPU::Render(UINT InstanceCount, UINT StartInstance) const
 {
     if (InstanceCount == 0)
         return;
-    pCommandList->IASetIndexBuffer(&mIndexBufferView);
-    pCommandList->IASetVertexBuffers(0, 1, &mVertexBufferView);
-    pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    pCommandList->DrawIndexedInstanced(mNIndices, InstanceCount, 0, 0, StartInstance);
+    pCommandListDirect->IASetIndexBuffer(&mIndexBufferView);
+    pCommandListDirect->IASetVertexBuffers(0, 1, &mVertexBufferView);
+    pCommandListDirect->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    pCommandListDirect->DrawIndexedInstanced(mNIndices, InstanceCount, 0, 0, StartInstance);
 }
 
 void TMonoModelGPU::InitBBox(const TMonoLodCPU &lod)
@@ -504,14 +547,7 @@ void TMonoModelGPU::LoadGLBs(std::string_view basePath, size_t nLods, size_t nMa
     mPickedLods.resize(nMaxInstances);
     mLodOffset.resize(nLods + 1);
 
-    CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_UPLOAD);
-    auto                    desc = CD3DX12_RESOURCE_DESC::Buffer(nMaxInstances * sizeof(float3));
-    ThrowIfFailed(pDevice->CreateCommittedResource(&heapProps,
-                                                   D3D12_HEAP_FLAG_NONE,
-                                                   &desc,
-                                                   D3D12_RESOURCE_STATE_GENERIC_READ,
-                                                   nullptr,
-                                                   IID_PPV_ARGS(&pInstanceBuffer)));
+    pInstanceBuffer = CreateGenericBuffer(nMaxInstances * sizeof(float3));
 
     mInstanceBufferView                = {};
     mInstanceBufferView.BufferLocation = pInstanceBuffer->GetGPUVirtualAddress();
@@ -560,7 +596,7 @@ void TMonoModelGPU::Commit()
     CD3DX12_RANGE writtenRange(0, sizeof(float3) * mNInstances);
     pInstanceBuffer->Unmap(0, &writtenRange);
 
-    pCommandList->IASetVertexBuffers(1, 1, &mInstanceBufferView);
+    pCommandListDirect->IASetVertexBuffers(1, 1, &mInstanceBufferView);
     for (size_t iLod = 0; iLod < LodCount(); ++iLod)
     {
         size_t lodBeg = mLodOffset[iLod];
@@ -571,12 +607,12 @@ void TMonoModelGPU::Commit()
 
     /*
     void         *pInstanceDataBegin = nullptr;
-    CD3DX12_RANGE readRange(0, 0);
-    ThrowIfFailed(pInstanceBuffer->Map(0, &readRange, &pInstanceDataBegin));
+    CD3DX12_RANGE emptyRange(0, 0);
+    ThrowIfFailed(pInstanceBuffer->Map(0, &emptyRange, &pInstanceDataBegin));
     memcpy(pInstanceDataBegin, mInstances.data(), sizeof(float3) * mNInstances);
     pInstanceBuffer->Unmap(0, nullptr);
 
-    pCommandList->IASetVertexBuffers(1, 1, &mInstanceBufferView);
+    pCommandListDirect->IASetVertexBuffers(1, 1, &mInstanceBufferView);
     for (size_t iInstance = 0; iInstance < mNInstances; ++iInstance)
     {
         size_t iLod = mPickedLods[iInstance];
@@ -585,7 +621,7 @@ void TMonoModelGPU::Commit()
     */
 }
 
-void TMeshletModelGPU::Upload(const TMeshletModelCPU &model)
+void TMeshletModelGPU::Upload(const TMeshletModelCPU &model, uint nMaxInstances)
 {
     PResource pUploadVertices;
     // PResource pUploadGlobalIndices;
@@ -593,14 +629,22 @@ void TMeshletModelGPU::Upload(const TMeshletModelCPU &model)
     PResource pUploadMeshlets;
     PResource pUploadMeshletBoxes;
 
-    meshes = model.Meshes;
+    mMeshes = model.Meshes;
 
-    ThrowIfFailed(pCommandList->Reset(pCommandAllocator.Get(), nullptr));
+    ThrowIfFailed(pCommandListDirect->Reset(pCommandAllocatorDirect.Get(), nullptr));
 
     std::vector<TVertex> appliedVertices;
     appliedVertices.reserve(model.GlobalIndices.size());
     for (uint iVert : model.GlobalIndices)
         appliedVertices.push_back(model.Vertices[iVert & UINT32_C(0x7FFFFFFF)]);
+
+    mRoots.clear();
+    for (size_t iMeshlet = 0; iMeshlet < model.Meshlets.size(); ++iMeshlet)
+    {
+        const TMeshletDesc &meshlet = model.Meshlets[iMeshlet];
+        if (meshlet.ParentCount == 0)
+            mRoots.push_back(iMeshlet);
+    }
 
     uint MaxVertCount = 0;
     uint MaxPrimCount = 0;
@@ -621,47 +665,76 @@ void TMeshletModelGPU::Upload(const TMeshletModelCPU &model)
     QueryUploadVector(model.Primitives, &pPrimitives, &pUploadPrimitives);
     QueryUploadVector(model.Meshlets, &pMeshlets, &pUploadMeshlets);
     QueryUploadVector(model.MeshletBoxes, &pMeshletBoxes, &pUploadMeshletBoxes);
-    ThrowIfFailed(pCommandList->Close());
+    ThrowIfFailed(pCommandListDirect->Close());
     ExecuteCommandList();
 
-    PFence pFence;
-    ThrowIfFailed(pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&pFence)));
-    pCommandQueueDirect->Signal(pFence.Get(), 1);
+    uint nMaxMeshlets = nMaxInstances * model.Meshlets.size();
+    pTasks            = CreateGenericBuffer(16);
+    pQueue            = CreateGenericBuffer(sizeof(uint) * nMaxMeshlets);
 
-    if (pFence->GetCompletedValue() != 1)
-    {
-        TRaiiHandle hEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-        if (!hEvent.Get())
-            ThrowIfFailed(HRESULT_FROM_WIN32(GetLastError()));
-        pFence->SetEventOnCompletion(1, hEvent.Get());
-        WaitForSingleObjectEx(hEvent.Get(), INFINITE, FALSE);
-    }
+    TFence fence;
+    fence.Init(pCommandQueueDirect);
+    fence.Wait();
 
     mMaxLayer = 0;
-    for (size_t iMesh = 0; iMesh < meshes.size(); ++iMesh)
+    for (size_t iMesh = 0; iMesh < mMeshes.size(); ++iMesh)
     {
-        size_t iLastMeshlet = meshes[iMesh].MeshletCount - 1;
+        size_t iLastMeshlet = mMeshes[iMesh].MeshletCount - 1;
         uint   iLayer       = model.Meshlets[iLastMeshlet].Height;
         mMaxLayer           = (std::max)(mMaxLayer, iLayer);
     }
 }
 
+void TMeshletModelGPU::Reset(uint nInstances)
+{
+    uint          nQueued = 0;
+    void         *pMapped = nullptr;
+    CD3DX12_RANGE emptyRange(0, 0);
+    ThrowIfFailed(pQueue->Map(0, &emptyRange, &pMapped));
+    {
+        auto pQueue = reinterpret_cast<uint2 *>(pMapped);
+        for (uint iInstance = 0; iInstance < nInstances; ++iInstance)
+        {
+            for (uint iMeshlet : mRoots)
+                *pQueue++ = uint2(iMeshlet, iInstance);
+        }
+    }
+    pQueue->Unmap(0, nullptr);
+    ThrowIfFailed(pTasks->Map(0, &emptyRange, &pMapped));
+    {
+        auto pTasks = reinterpret_cast<uint *>(pMapped);
+        pTasks[0]   = 0;
+        pTasks[1]   = nInstances * mRoots.size();
+        pTasks[2]   = pTasks[1];
+        pTasks[3]   = 0;
+    }
+    pTasks->Unmap(0, nullptr);
+
+    // Подобрать такую константу, чтобы хватило на загрузку видеокарты
+    pCommandListCompute->Dispatch(256, 1, 1);
+
+    ThrowIfFailed(pCommandListCompute->Close());
+    ID3D12CommandList *ppCommandLists[] = {pCommandListCompute.Get()};
+    pCommandQueueCompute->ExecuteCommandLists(1, ppCommandLists);
+    computeFence.Wait();
+}
+
 void TMeshletModelGPU::Render(int nInstances)
 {
-    for (uint iMesh = 0; iMesh < meshes.size(); ++iMesh)
+    for (uint iMesh = 0; iMesh < mMeshes.size(); ++iMesh)
     {
-        TMeshDesc &mesh = meshes[iMesh];
-        pCommandList->SetGraphicsRoot32BitConstant(1, mesh.MeshletCount, 0);
-        pCommandList->SetGraphicsRoot32BitConstant(1, mesh.MeshletTriangleOffsets, 1);
-        pCommandList->SetGraphicsRootShaderResourceView(2, pVertices->GetGPUVirtualAddress());
-        // pCommandList->SetGraphicsRootShaderResourceView(3, pGlobalIndices->GetGPUVirtualAddress());
-        pCommandList->SetGraphicsRootShaderResourceView(4, pPrimitives->GetGPUVirtualAddress());
-        pCommandList->SetGraphicsRootShaderResourceView(5, pMeshlets->GetGPUVirtualAddress());
-        pCommandList->SetGraphicsRootShaderResourceView(6, pMeshletBoxes->GetGPUVirtualAddress());
+        TMeshDesc &mesh = mMeshes[iMesh];
+        pCommandListDirect->SetGraphicsRoot32BitConstant(1, mesh.MeshletCount, 0);
+        pCommandListDirect->SetGraphicsRoot32BitConstant(1, mesh.MeshletTriangleOffsets, 1);
+        pCommandListDirect->SetGraphicsRootShaderResourceView(2, pVertices->GetGPUVirtualAddress());
+        // pCommandListDirect->SetGraphicsRootShaderResourceView(3, pGlobalIndices->GetGPUVirtualAddress());
+        pCommandListDirect->SetGraphicsRootShaderResourceView(4, pPrimitives->GetGPUVirtualAddress());
+        pCommandListDirect->SetGraphicsRootShaderResourceView(5, pMeshlets->GetGPUVirtualAddress());
+        pCommandListDirect->SetGraphicsRootShaderResourceView(6, pMeshletBoxes->GetGPUVirtualAddress());
 
         constexpr uint GROUP_SIZE_AS = 32;
 
         uint nDispatch = (mesh.MeshletCount + GROUP_SIZE_AS - 1) / GROUP_SIZE_AS;
-        pCommandList->DispatchMesh(nDispatch, nInstances, 1);
+        pCommandListDirect->DispatchMesh(nDispatch, nInstances, 1);
     }
 }

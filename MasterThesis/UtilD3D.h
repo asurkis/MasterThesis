@@ -6,11 +6,14 @@
 constexpr D3D_FEATURE_LEVEL NEEDED_FEATURE_LEVEL = D3D_FEATURE_LEVEL_11_0;
 constexpr UINT              FRAME_COUNT          = 3;
 
-inline ComPtr<ID3D12Device2>              pDevice;
-inline ComPtr<ID3D12CommandQueue>         pCommandQueueDirect;
-inline ComPtr<IDXGISwapChain3>            pSwapChain;
-inline ComPtr<ID3D12CommandAllocator>     pCommandAllocator;
-inline ComPtr<ID3D12GraphicsCommandList6> pCommandList;
+inline ComPtr<ID3D12Device2>   pDevice;
+inline ComPtr<IDXGISwapChain3> pSwapChain;
+inline PCommandQueue           pCommandQueueDirect;
+inline PCommandAllocator       pCommandAllocatorDirect;
+inline PCommandList            pCommandListDirect;
+inline PCommandQueue           pCommandQueueCompute;
+inline PCommandAllocator       pCommandAllocatorCompute;
+inline PCommandList            pCommandListCompute;
 
 inline PDescriptorHeap pRtvHeap;
 inline UINT            rtvDescSize;
@@ -21,6 +24,10 @@ inline UINT            dsvDescSize;
 inline PResource pRenderTargets[FRAME_COUNT];
 inline PResource pDepthBuffer;
 inline UINT      curFrame = 0;
+
+PResource CreateGenericBuffer(UINT64                width,
+                              D3D12_RESOURCE_STATES initState = D3D12_RESOURCE_STATE_COMMON,
+                              D3D12_HEAP_TYPE       heapType  = D3D12_HEAP_TYPE_UPLOAD);
 
 void LoadPipeline(UINT width, UINT height);
 void UpdateRenderTargetSize(UINT width, UINT height);
@@ -58,6 +65,8 @@ class TMeshletPipeline
 {
     PPipelineState pPipelineState;
     PRootSignature pRootSignature;
+    PPipelineState pPipelineStateCompute;
+    PRootSignature pRootSignatureCompute;
 
     void LoadBytecode(const std::vector<BYTE> &dataMS,
                       const std::vector<BYTE> &dataPS,
@@ -68,6 +77,18 @@ class TMeshletPipeline
     void Load(const std::filesystem::path &pathMS,
               const std::filesystem::path &pathPS,
               const std::filesystem::path &pathAS);
+
+    ID3D12PipelineState *GetStateRaw() const noexcept { return pPipelineState.Get(); }
+    ID3D12RootSignature *GetRootSignatureRaw() const noexcept { return pRootSignature.Get(); }
+};
+
+class TComputePipeline
+{
+    PPipelineState pPipelineState;
+    PRootSignature pRootSignature;
+
+  public:
+    void Load(const std::filesystem::path &pathCS);
 
     ID3D12PipelineState *GetStateRaw() const noexcept { return pPipelineState.Get(); }
     ID3D12RootSignature *GetRootSignatureRaw() const noexcept { return pRootSignature.Get(); }
@@ -124,14 +145,23 @@ class TMeshletModelGPU
     PResource pPrimitives;
     PResource pMeshlets;
     PResource pMeshletBoxes;
-    uint      mMaxLayer;
+
+    PResource pTasks;
+    PResource pQueue;
+    PResource pParents;
+    PResource pChildren;
+
+    uint mMaxLayer;
 
     // Пока поддерживаем отрисовку только одного меша за раз
-    std::vector<TMeshDesc> meshes;
+    std::vector<TMeshDesc> mMeshes;
+    std::vector<uint>      mRoots;
 
   public:
     constexpr uint MaxLayer() const noexcept { return mMaxLayer; }
 
-    void Upload(const TMeshletModelCPU &model);
+    void Upload(const TMeshletModelCPU &model, uint nMaxInstances);
+
+    void Reset(uint nInstances);
     void Render(int nInstances);
 };

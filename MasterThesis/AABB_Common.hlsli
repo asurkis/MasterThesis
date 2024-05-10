@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Util.hlsli"
+#include "CommonASMS.hlsli"
 
 struct TVertexOut
 {

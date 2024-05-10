@@ -17,12 +17,14 @@
 
 using Microsoft::WRL::ComPtr;
 
-using PBlob = ComPtr<ID3DBlob>;
-using PDescriptorHeap = ComPtr<ID3D12DescriptorHeap>;
-using PFence = ComPtr<ID3D12Fence>;
-using PResource = ComPtr<ID3D12Resource>;
-using PRootSignature = ComPtr<ID3D12RootSignature>;
-using PPipelineState = ComPtr<ID3D12PipelineState>;
+using PBlob             = ComPtr<ID3DBlob>;
+using PCommandAllocator = ComPtr<ID3D12CommandAllocator>;
+using PCommandList      = ComPtr<ID3D12GraphicsCommandList6>;
+using PCommandQueue     = ComPtr<ID3D12CommandQueue>;
+using PDescriptorHeap   = ComPtr<ID3D12DescriptorHeap>;
+using PResource         = ComPtr<ID3D12Resource>;
+using PRootSignature    = ComPtr<ID3D12RootSignature>;
+using PPipelineState    = ComPtr<ID3D12PipelineState>;
 
 inline void ThrowIfFailedFn_(HRESULT hr, std::string_view file, int line)
 {

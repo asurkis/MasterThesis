@@ -10,7 +10,7 @@ uint3 UnpackPrimitive(uint primitive)
 
 uint3 GetPrimitive(uint index)
 {
-    uint prim = Primitives[Meshlet.PrimOffset + index];
+    uint prim = Primitives[Meshlet.Prim.Offset + index];
     return UnpackPrimitive(prim);
 }
 
@@ -21,7 +21,7 @@ uint3 GetPrimitive(uint index)
 
 TVertexOut GetVertexAttributes(float3 pos, uint iLocVert)
 {
-    TVertex v = Vertices[Meshlet.VertOffset + iLocVert];
+    TVertex v = Vertices[Meshlet.Vert.Offset + iLocVert];
     TVertexOut vout;
     vout.PositionVS = mul(float4(v.Position + pos, 1), MainCB.MatView).xyz;
     vout.PositionHS = mul(float4(v.Position + pos, 1), MainCB.MatViewProj);
@@ -68,16 +68,16 @@ void main(
     out indices uint3 tris[128])
 {
     Meshlet = Payload.Meshlets[gid];
-    SetMeshOutputCounts(Meshlet.VertCount, Meshlet.PrimCount);
+    SetMeshOutputCounts(Meshlet.Vert.Count, Meshlet.Prim.Count);
 
-    if (gtid < Meshlet.PrimCount)
+    if (gtid < Meshlet.Prim.Count)
         tris[gtid] = GetPrimitive(gtid);
 
     uint iLocVert;
     
     // Повторим код 2 раза, чтобы не было менее предсказуемого цикла
     iLocVert = gtid;
-    if (iLocVert < Meshlet.VertCount)
+    if (iLocVert < Meshlet.Vert.Count)
         verts[iLocVert] = GetVertexAttributes(Payload.Position.xyz, iLocVert);
     
     //iLocVert = gtid + 128;

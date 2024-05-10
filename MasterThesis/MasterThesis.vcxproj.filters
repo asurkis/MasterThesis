@@ -52,6 +52,9 @@
     <None Include="AABB_Common.hlsli">
       <Filter>Файлы ресурсов\Шейдеры</Filter>
     </None>
+    <None Include="CommonASMS.hlsli">
+      <Filter>Файлы ресурсов\Шейдеры</Filter>
+    </None>
     <None Include="Util.hlsli">
       <Filter>Файлы ресурсов\Шейдеры</Filter>
     </None>
@@ -73,6 +76,9 @@
       <Filter>Файлы ресурсов\Шейдеры</Filter>
     </FxCompile>
     <FxCompile Include="MainVS.hlsl">
+      <Filter>Файлы ресурсов\Шейдеры</Filter>
+    </FxCompile>
+    <FxCompile Include="MainCS.hlsl">
       <Filter>Файлы ресурсов\Шейдеры</Filter>
     </FxCompile>
   </ItemGroup>

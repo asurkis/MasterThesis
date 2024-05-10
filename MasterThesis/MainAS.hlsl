@@ -1,4 +1,4 @@
-#include "Util.hlsli"
+#include "CommonASMS.hlsli"
 
 groupshared float3 MeshPosition;
 
@@ -61,8 +61,8 @@ bool ShouldDisplay(uint iMeshlet, out TMeshlet meshlet, out float VisibleRadius)
         return meshlet.Height == MainCB.IntInfo.z / 3;
     }
     
-    uint iParent = meshlet.ParentOffset;
-    bool isRoot = meshlet.ParentCount == 0;
+    uint iParent = meshlet.Parent.Offset;
+    bool isRoot = meshlet.Parent.Count == 0;
     bool isLeaf = meshlet.Height == 0;
     
     if (!isRoot)
