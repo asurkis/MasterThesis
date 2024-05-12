@@ -14,14 +14,11 @@ uint3 GetPrimitive(uint index)
     return UnpackPrimitive(prim);
 }
 
-// uint GetVertexIndex(uint localIndex)
-// {
-//     return GlobalIndices[Meshlet.VertOffset + localIndex];
-// }
-
 TVertexOut GetVertexAttributes(float3 pos, uint iLocVert)
 {
-    TVertex v = Vertices[Meshlet.VertOffset + iLocVert];
+    // uint iVert = GlobalIndices[Meshlet.VertOffset + iLocVert];
+    uint iVert = Meshlet.VertOffset + iLocVert;
+    TVertex v = Vertices[iVert];
     TVertexOut vout;
     vout.PositionVS = mul(float4(v.Position + pos, 1), MainCB.MatView).xyz;
     vout.PositionHS = mul(float4(v.Position + pos, 1), MainCB.MatViewProj);

@@ -8,6 +8,9 @@
 
 using namespace DirectX;
 
+RECT beforeFullScreen = {};
+bool isFullScreen     = false;
+
 bool useVSync = true;
 
 enum SrvDescriptors
@@ -261,6 +264,7 @@ static void OnRender()
 
     ImGui::Begin("Info");
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+    if (ImGui::CollapsingHeader("Stats"))
     {
         void         *pResultsBegin = nullptr;
         CD3DX12_RANGE readRange(0, sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS));
@@ -269,6 +273,9 @@ static void OnRender()
         ImGui::Text("Primitives invoked: %d", pStats->CInvocations);
         ImGui::Text("Of them rendered: %d", pStats->CPrimitives);
         pQueryResults->Unmap(0, nullptr);
+
+        ImGui::Text("Width: %d", WindowWidth);
+        ImGui::Text("Height: %d", WindowHeight);
     }
     ImGui::Checkbox("VSync", &useVSync);
     if (ImGui::CollapsingHeader("Camera"))
@@ -437,6 +444,39 @@ LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
         case VK_ESCAPE: PostQuitMessage(0); break;
         case 'V': useVSync ^= true; break;
+        case VK_F11:
+            isFullScreen = !isFullScreen;
+            if (isFullScreen)
+            {
+                GetWindowRect(hWnd, &beforeFullScreen);
+                SetWindowLongW(hWnd, GWL_STYLE, WS_OVERLAPPED);
+                HMONITOR      hMonitor    = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+                MONITORINFOEX monitorInfo = {};
+                monitorInfo.cbSize        = sizeof(MONITORINFOEX);
+                GetMonitorInfoW(hMonitor, &monitorInfo);
+
+                SetWindowPos(hWnd,
+                             HWND_TOP,
+                             monitorInfo.rcMonitor.left,
+                             monitorInfo.rcMonitor.top,
+                             monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left,
+                             monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top,
+                             SWP_FRAMECHANGED | SWP_NOACTIVATE);
+                ShowWindow(hWnd, SW_MAXIMIZE);
+            }
+            else
+            {
+                SetWindowLongW(hWnd, GWL_STYLE, WS_OVERLAPPEDWINDOW);
+                SetWindowPos(hWnd,
+                             HWND_NOTOPMOST,
+                             beforeFullScreen.left,
+                             beforeFullScreen.top,
+                             beforeFullScreen.right - beforeFullScreen.left,
+                             beforeFullScreen.bottom - beforeFullScreen.top,
+                             SWP_FRAMECHANGED | SWP_NOACTIVATE);
+                ShowWindow(hWnd, SW_NORMAL);
+            }
+            break;
         default: return DefWindowProc(hWnd, uMsg, wParam, lParam);
         }
         break;

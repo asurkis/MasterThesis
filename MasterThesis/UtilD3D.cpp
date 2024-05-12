@@ -617,6 +617,7 @@ void TMeshletModelGPU::Upload(const TMeshletModelCPU &model)
     }
 
     QueryUploadVector(appliedVertices, &pVertices, &pUploadVertices);
+    // QueryUploadVector(model.Vertices, &pVertices, &pUploadVertices);
     // QueryUploadVector(model.GlobalIndices, &pGlobalIndices, &pUploadGlobalIndices);
     QueryUploadVector(model.Primitives, &pPrimitives, &pUploadPrimitives);
     QueryUploadVector(model.Meshlets, &pMeshlets, &pUploadMeshlets);
