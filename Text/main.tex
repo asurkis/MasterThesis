@@ -1,7 +1,7 @@
 \documentclass[14pt]{extarticle}
 
-% \usepackage[T2A]{fontenc}
-% \usepackage[utf8]{inputenc}
+\usepackage[T2A]{fontenc}
+\usepackage[utf8]{inputenc}
 \usepackage[russian]{babel}
 \usepackage[a4paper,left=30mm,right=15mm,top=20mm,bottom=20mm]{geometry}
 \usepackage{amsmath}
@@ -9,7 +9,7 @@
 \usepackage{tocloft}
 % \usepackage{minted}
 \usepackage{indentfirst}
-\usepackage{fontspec}
+% \usepackage{fontspec}
 % \usepackage{mathtools}
 % \usepackage{wasysym}
 \usepackage{booktabs}
@@ -20,9 +20,10 @@
 \usepackage{tikz}
 \usepackage{csquotes}
 \usepackage[backend=biber,sorting=none,bibstyle=gost-numeric]{biblatex}
+\usepackage{theorem}
 
 % TODO: replace with Times New Roman
-\setmainfont{LiberationSerif}
+% \setmainfont{LiberationSerif}
 % \setmainfont{Times New Roman}
 % \setmonofont{JetBrains Mono}
 
@@ -60,7 +61,7 @@
     \input{chapter4.tex}
     \input{chapter5.tex}
     \input{conclusion.tex}
-    % \input{bibliography.tex}
+    \input{bibliography.tex}
     \appendix
     \input{appendix.tex}
 \end{document}
