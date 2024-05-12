@@ -36,7 +36,7 @@ TMeshletPipeline aabbPipeline;
 
 XMVECTOR camFocus  = XMVectorSet(-140.0f, 2010.0f, -150.0f, 0.0f);
 float    camRotX   = XMConvertToRadians(-30.0f);
-float    camRotY   = XMConvertToRadians(50.0f);
+float    camRotY   = XMConvertToRadians(45.0f);
 float    camSpeed  = 256.0f;
 float    camOffset = 3.0f;
 
@@ -272,6 +272,7 @@ static void OnRender()
         auto pStats = reinterpret_cast<D3D12_QUERY_DATA_PIPELINE_STATISTICS *>(pResultsBegin);
         ImGui::Text("Primitives invoked: %d", pStats->CInvocations);
         ImGui::Text("Of them rendered: %d", pStats->CPrimitives);
+        ImGui::Text("Pixel shader invocations: %d", pStats->PSInvocations);
         pQueryResults->Unmap(0, nullptr);
 
         ImGui::Text("Width: %d", WindowWidth);

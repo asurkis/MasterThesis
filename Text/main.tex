@@ -14,13 +14,13 @@
 % \usepackage{wasysym}
 \usepackage{booktabs}
 \usepackage{float}
+\usepackage{makecell}
 \usepackage{caption}
 \usepackage{graphicx}
 \usepackage{svg}
 \usepackage{tikz}
 \usepackage{csquotes}
 \usepackage[backend=biber,sorting=none,bibstyle=gost-numeric]{biblatex}
-\usepackage{theorem}
 
 % TODO: replace with Times New Roman
 % \setmainfont{LiberationSerif}
@@ -31,13 +31,14 @@
 \renewcommand{\baselinestretch}{1.5}
 
 \usetikzlibrary{decorations.text}
+\usetikzlibrary{decorations.pathmorphing}
 \setcounter{secnumdepth}{0}
 
 \bibliography{refs}
 
 \DeclareCaptionLabelSeparator{mdash}{ --- }
 \captionsetup{labelsep=mdash}
-\captionsetup[table]{justification=justified,singlelinecheck=off}
+% \captionsetup[table]{justification=justified,singlelinecheck=off}
 
 \begin{document}
     \makeatletter
