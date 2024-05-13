@@ -120,7 +120,7 @@
 
 На рисунке~\ref{fig:AABB} приведён AABB (обозначен красным) для двумерной фигуры (обозначена синим).
 
-\begin{figure}[h]
+\begin{figure}[ht]
     \centering
     \begin{tikzpicture}
         \filldraw[fill=blue!25] (1,1) -- (5,2) -- (4, 4) -- (3,2) -- (1,5) -- (2,2) -- (1,1);
@@ -143,11 +143,39 @@
     \item отрисовка мешлетов определённого слоя с отображением чёрным тех вершин, которые входят в шов.
 \end{itemize}
 
-На рисунке~\ref{fig:execution-example} можно видеть пример выполнения программы.
+На рисунке~\ref{fig:execution-example} приведён пример выполнения программы.
 Исходная модель содержит 10 млн. треугольников и 4~999~996 вершин, для 64 копий модели (не все из которых видны в кадре) отправляется на отрисовку 11~307~215 треугольников.
 
-\begin{figure}[h]
+\begin{figure}[ht]
     \includegraphics[width=\textwidth]{pics/impl2.png}
-    \caption{Выполнение }
+    \caption{Выполнение}
     \label{fig:execution-example}
 \end{figure}
+
+На рисунке~\ref{fig:impl-example} приведены примеры отрисовки программой одного и того же объекта на разном удалении от камеры.
+
+\begin{figure}[ht]
+    \centering
+
+    \begin{subfigure}{.45\textwidth}
+        \includegraphics[width=\textwidth]{pics/impl-example-0.png}
+    \end{subfigure}
+    \begin{subfigure}{.45\textwidth}
+        \includegraphics[width=\textwidth]{pics/impl-example-1.png}
+    \end{subfigure}
+
+    \medskip
+
+    \begin{subfigure}{.45\textwidth}
+        \includegraphics[width=\textwidth]{pics/impl-example-2.png}
+    \end{subfigure}
+    \begin{subfigure}{.45\textwidth}
+        \includegraphics[width=\textwidth]{pics/impl-example-3.png}
+    \end{subfigure}
+    \caption{Один объект на разных удалениях}
+    \label{fig:impl-example}
+\end{figure}
+
+\subsection*{Итоги главы}
+Таким образом, в главе приведены детали реализации упрощённой системы динамической кластерной детализации.
+В ходе реализации были выявлены принципиальные ограничения такой технологии и существенные технические проблемы, которые необходимо решать при реализации полной версии.

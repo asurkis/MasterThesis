@@ -60,24 +60,24 @@
 
 Было измерено количество кадров в секунду (FPS), количество отправляемых на растеризацию примитивов, количество растеризуемых примитивов и количество вызовов пиксельного шейдера.
 
-Скриншоты выполнения можно видеть на рисунках \ref{fig:impl-cluster-1}, \ref{fig:impl-cluster-2} и~\ref{fig:impl-mono}.
-Результаты измерений можно видеть в таблице~\ref{tab:fps}.
+Скриншоты выполнения приведены на рисунках \ref{fig:impl-cluster-1}, \ref{fig:impl-cluster-2} и~\ref{fig:impl-mono}.
+Результаты измерений приведены в таблице~\ref{tab:fps}.
 
-\begin{figure}[h]
+\begin{figure}[ht]
     \centering
     \includegraphics[width=\textwidth]{pics/impl1.png}
     \caption{Кластерные лоды}
     \label{fig:impl-cluster-1}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[ht]
     \centering
     \includegraphics[width=\textwidth]{pics/impl2.png}
     \caption{Кластерные лоды, без массива индексов}
     \label{fig:impl-cluster-2}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[ht]
     \centering
     \includegraphics[width=\textwidth]{pics/impl3.png}
     \caption{Монолитные лоды}
@@ -114,3 +114,22 @@
     \caption{Сравнение производительности}
     \label{tab:fps}
 \end{table}
+
+На рисунках~\ref{fig:impl-heatmap-cluster} и~\ref{fig:impl-heatmap-mono} приведена визуализация площади отображаемых треугольников.
+Красным цветом обозначены треугольники, проекции которых имеют площадь 1 пиксель, зелёным --- 3 пикселя, бирюзовым --- 7 пикселей, синим --- более 15 пикселей.
+
+\begin{figure}[ht]
+    \includegraphics[width=\textwidth]{pics/impl-heatmap-cluster.png}
+    \caption{Площадь треугольников мешлетов}
+    \label{fig:impl-heatmap-cluster}
+\end{figure}
+
+\begin{figure}[ht]
+    \includegraphics[width=\textwidth]{pics/impl-heatmap-mono.png}
+    \caption{Площадь треугольников лодов}
+    \label{fig:impl-heatmap-mono}
+\end{figure}
+
+\subsection*{Итоги главы}
+Сравнение с тривиальным алгоритмом монолитного лоддирования показало, что полученная реализация технологии процедурного кластерного видозависимого лоддирования пока проигрывает в производительности на 35\%.
+Для исправления этого в дальнейших работах предлагается исследовать те оптимизации, предложенные в главе 3, которые не были реализованы в данной работе.
