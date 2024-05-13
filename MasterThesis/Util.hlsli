@@ -48,8 +48,8 @@ struct TPayload
 {
     float4 Position;
     TMeshlet Meshlets[GROUP_SIZE_AS];
-    float4 AdditionalInfo[GROUP_SIZE_AS];
     uint MeshletIndex[GROUP_SIZE_AS];
+    float VisibleRadius[GROUP_SIZE_AS];
 };
 
 #define ROOT_SIG                                                                                                       \
@@ -59,7 +59,8 @@ struct TPayload
     "SRV(t1),"                                                                                                         \
     "SRV(t2),"                                                                                                         \
     "SRV(t3),"                                                                                                         \
-    "SRV(t4)"
+    "SRV(t4),"                                                                                                         \
+    "SRV(t5)"
 
 ConstantBuffer<TMainCB> MainCB : register(b0);
 ConstantBuffer<TMesh> MeshInfo : register(b1);
@@ -68,7 +69,8 @@ StructuredBuffer<TVertex> Vertices : register(t0);
 StructuredBuffer<uint> GlobalIndices : register(t1);
 StructuredBuffer<uint> Primitives : register(t2);
 StructuredBuffer<TMeshlet> Meshlets : register(t3);
-StructuredBuffer<TBoundingBox> MeshletBoxes : register(t4);
+StructuredBuffer<TBoundingBox> MeshletBoxesHierarchy : register(t4);
+StructuredBuffer<TBoundingBox> MeshletBoxes : register(t5);
 
 float3 PaletteColor(uint idx)
 {

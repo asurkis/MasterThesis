@@ -123,6 +123,7 @@ class TMeshletModelGPU
     PResource pGlobalIndices;
     PResource pPrimitives;
     PResource pMeshlets;
+    PResource pMeshletBoxesHierarchy;
     PResource pMeshletBoxes;
     uint      mMaxLayer;
 

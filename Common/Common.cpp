@@ -186,10 +186,11 @@ void TMeshletModelCPU::LoadFromFile(const std::filesystem::path &path)
         }
     }
 
+    MeshletBoxesHierarchy = MeshletBoxes;
     for (size_t iMeshlet = 0; iMeshlet < Meshlets.size(); ++iMeshlet)
     {
         const TMeshletDesc &meshlet = Meshlets[iMeshlet];
-        const TBoundingBox &aabb    = MeshletBoxes[iMeshlet];
+        const TBoundingBox &aabb    = MeshletBoxesHierarchy[iMeshlet];
         // Восстанавливаем AABB родителей
         float maxParentError = 0.0f;
         for (uint iiParent = 0; iiParent < meshlet.ParentCount; ++iiParent)
@@ -197,7 +198,7 @@ void TMeshletModelCPU::LoadFromFile(const std::filesystem::path &path)
             uint iParent = meshlet.ParentOffset + iiParent;
             if (iParent <= iMeshlet || iParent >= Meshlets.size())
                 throw std::runtime_error("Incorrect Parent1");
-            TBoundingBox &aabbParent = MeshletBoxes[iParent];
+            TBoundingBox &aabbParent = MeshletBoxesHierarchy[iParent];
 
             aabbParent.Min.x = XMMin(aabbParent.Min.x, aabb.Min.x);
             aabbParent.Min.y = XMMin(aabbParent.Min.y, aabb.Min.y);

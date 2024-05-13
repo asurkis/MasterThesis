@@ -35,29 +35,38 @@ bool IsCulled(TBoundingBox box)
     return false;
 }
 
-bool IsEnough(float err, TBoundingBox box, out float VisibleRadius)
+float AngularRadius(TBoundingBox box)
 {
     float3 center = 0.5 * (box.Min + box.Max) + MeshPosition;
     float diameter = length(box.Max - box.Min);
     float4 hs = mul(float4(center, 1), MainCB.MatViewProj);
     if (hs.w <= 0)
-        return true;
-    float r = diameter / hs.w;
-    VisibleRadius = r;
+        return 1.0f;
+    return diameter / hs.w;
+}
+
+float PixelRadius(TBoundingBox box)
+{
+    return AngularRadius(box) * min(MainCB.IntInfo.x, MainCB.IntInfo.y);
+}
+
+bool IsEnough(float err, TBoundingBox box)
+{
+    float r = AngularRadius(box);
+    // float r = PixelRadius(box);
     // return err * r < MainCB.FloatInfo.w;
     return r < MainCB.FloatInfo.w;
 }
 
-bool ShouldDisplay(uint iMeshlet, out TMeshlet meshlet, out float VisibleRadius)
+bool ShouldDisplay(uint iMeshlet, out TMeshlet meshlet)
 {
     if (iMeshlet >= MeshInfo.MeshletCount)
         return false;
     
     meshlet = Meshlets[iMeshlet];
-    TBoundingBox box = MeshletBoxes[iMeshlet];
+    TBoundingBox box = MeshletBoxesHierarchy[iMeshlet];
     if (MainCB.IntInfo.z != 0xFFFFFFFF)
     {
-        IsEnough(meshlet.Error, box, VisibleRadius);
         return meshlet.Height == MainCB.IntInfo.z / 3;
     }
     
@@ -68,17 +77,16 @@ bool ShouldDisplay(uint iMeshlet, out TMeshlet meshlet, out float VisibleRadius)
     if (!isRoot)
     {
         TMeshlet parent = Meshlets[iParent];
-        TBoundingBox parentBox = MeshletBoxes[iParent];
+        TBoundingBox parentBox = MeshletBoxesHierarchy[iParent];
         if (IsCulled(parentBox))
             return false;
-        float blank;
-        if (IsEnough(parent.Error, parentBox, blank))
+        if (IsEnough(parent.Error, parentBox))
             return false;
     }
     
     if (IsCulled(box))
         return false;
-    return isLeaf || IsEnough(meshlet.Error, box, VisibleRadius);
+    return isLeaf || IsEnough(meshlet.Error, box);
 }
 
 [numthreads(GROUP_SIZE_AS, 1, 1)]
@@ -95,9 +103,8 @@ void main(
         GetZCodeComponent3(iInstance >> 2));
     float3 pos = iPos * MainCB.FloatInfo.xyz;
     MeshPosition = pos;
-    float VisibleRadius = 0.0f;
     TMeshlet meshlet;
-    bool shouldDisplay = ShouldDisplay(iMeshlet, meshlet, VisibleRadius);
+    bool shouldDisplay = ShouldDisplay(iMeshlet, meshlet);
     
     uint current = WavePrefixCountBits(shouldDisplay);
     uint nDispatch = WaveActiveCountBits(shouldDisplay);
@@ -107,11 +114,8 @@ void main(
     if (shouldDisplay)
     {
         p.Meshlets[current] = meshlet;
-        p.AdditionalInfo[current].x = VisibleRadius;
-        p.AdditionalInfo[current].y = MainCB.FloatInfo.w;
-        p.AdditionalInfo[current].z = VisibleRadius < MainCB.FloatInfo.w ? 0.0f : 1.0f;
-        p.AdditionalInfo[current].w = 0.0f;
         p.MeshletIndex[current] = iMeshlet;
+        p.VisibleRadius[current] = PixelRadius(MeshletBoxes[iMeshlet]);
     }
     DispatchMesh(nDispatch, 1, 1, p);
 }

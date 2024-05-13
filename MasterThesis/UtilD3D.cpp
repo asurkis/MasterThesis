@@ -591,6 +591,7 @@ void TMeshletModelGPU::Upload(const TMeshletModelCPU &model)
     // PResource pUploadGlobalIndices;
     PResource pUploadPrimitives;
     PResource pUploadMeshlets;
+    PResource pUploadMeshletBoxesHierarchy;
     PResource pUploadMeshletBoxes;
 
     meshes = model.Meshes;
@@ -621,6 +622,7 @@ void TMeshletModelGPU::Upload(const TMeshletModelCPU &model)
     // QueryUploadVector(model.GlobalIndices, &pGlobalIndices, &pUploadGlobalIndices);
     QueryUploadVector(model.Primitives, &pPrimitives, &pUploadPrimitives);
     QueryUploadVector(model.Meshlets, &pMeshlets, &pUploadMeshlets);
+    QueryUploadVector(model.MeshletBoxesHierarchy, &pMeshletBoxesHierarchy, &pUploadMeshletBoxesHierarchy);
     QueryUploadVector(model.MeshletBoxes, &pMeshletBoxes, &pUploadMeshletBoxes);
     ThrowIfFailed(pCommandList->Close());
     ExecuteCommandList();
@@ -658,7 +660,8 @@ void TMeshletModelGPU::Render(int nInstances)
         // pCommandList->SetGraphicsRootShaderResourceView(3, pGlobalIndices->GetGPUVirtualAddress());
         pCommandList->SetGraphicsRootShaderResourceView(4, pPrimitives->GetGPUVirtualAddress());
         pCommandList->SetGraphicsRootShaderResourceView(5, pMeshlets->GetGPUVirtualAddress());
-        pCommandList->SetGraphicsRootShaderResourceView(6, pMeshletBoxes->GetGPUVirtualAddress());
+        pCommandList->SetGraphicsRootShaderResourceView(6, pMeshletBoxesHierarchy->GetGPUVirtualAddress());
+        pCommandList->SetGraphicsRootShaderResourceView(7, pMeshletBoxes->GetGPUVirtualAddress());
 
         constexpr uint GROUP_SIZE_AS = 32;
 

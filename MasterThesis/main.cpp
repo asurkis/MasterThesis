@@ -4,7 +4,7 @@
 #include "UtilWin32.h"
 #include <DirectXMath.h>
 
-#define USE_MONO_LODS
+// #define USE_MONO_LODS
 
 using namespace DirectX;
 
@@ -28,7 +28,6 @@ PResource               pQueryResults;
 
 #ifdef USE_MONO_LODS
 TMonoPipeline mainPipeline;
-
 #else
 TMeshletPipeline mainPipeline;
 TMeshletPipeline aabbPipeline;
@@ -283,11 +282,17 @@ static void OnRender()
     {
         ImGui::SliderFloat("Movement speed", &camSpeed, 1.0f, 256.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
         ImGui::SliderFloat("Offset", &camOffset, 1.0f, 256.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-        ImGui::Text("Focus X: %.3f", XMVectorGetX(camFocus));
-        ImGui::Text("Focus Y: %.3f", XMVectorGetY(camFocus));
-        ImGui::Text("Focus Z: %.3f", XMVectorGetZ(camFocus));
-        ImGui::Text("Rotation X: %.1f deg", XMConvertToDegrees(camRotX));
-        ImGui::Text("Rotation Y: %.1f deg", XMConvertToDegrees(camRotY));
+
+        float camFocusTmp[3] = {XMVectorGetX(camFocus), XMVectorGetY(camFocus), XMVectorGetZ(camFocus)};
+        if (ImGui::SliderFloat3("Focus", camFocusTmp, -1000.0f, 1000.0f))
+            camFocus = XMVectorSet(camFocusTmp[0], camFocusTmp[1], camFocusTmp[2], 0.0f);
+
+        float camRotDeg[] = {XMConvertToDegrees(camRotX), XMConvertToDegrees(camRotY)};
+        if (ImGui::SliderFloat2("Rotation (deg)", camRotDeg, -180.0f, 180.0f))
+        {
+            camRotX = XMConvertToRadians(camRotDeg[0]);
+            camRotY = XMConvertToRadians(camRotDeg[1]);
+        }
     }
 #ifdef USE_MONO_LODS
     ImGui::SliderInt("LOD", &displayType, -1, model.LodCount() - 1);

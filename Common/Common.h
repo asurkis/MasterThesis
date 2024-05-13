@@ -77,6 +77,7 @@ struct TMeshletModelCPU
     std::vector<uint> Primitives;
 
     std::vector<TMeshletDesc> Meshlets;
+    std::vector<TBoundingBox> MeshletBoxesHierarchy;
     std::vector<TBoundingBox> MeshletBoxes;
 
     std::vector<TMeshDesc> Meshes;

@@ -14,7 +14,7 @@ uint3 GetPrimitive(uint index)
     return UnpackPrimitive(prim);
 }
 
-TVertexOut GetVertexAttributes(float3 pos, uint iLocVert)
+TVertexOut GetVertexAttributes(float3 pos, uint iLocVert, float additionalInfo)
 {
     // uint iVert = GlobalIndices[Meshlet.VertOffset + iLocVert];
     uint iVert = Meshlet.VertOffset + iLocVert;
@@ -48,8 +48,7 @@ TVertexOut GetVertexAttributes(float3 pos, uint iLocVert)
         }
     }
     */
-    // vout.DiffuseColor = e.AdditionalInfo.xyz;
-    vout.DiffuseColor = 1.xxx;
+    vout.DiffuseColor = additionalInfo.xxx;
 
     return vout;
 }
@@ -66,6 +65,9 @@ void main(
 {
     Meshlet = Payload.Meshlets[gid];
     SetMeshOutputCounts(Meshlet.VertCount, Meshlet.PrimCount);
+    
+    float visibleRadius = Payload.VisibleRadius[gid];
+    float trisPerPixel = Meshlet.PrimCount / (visibleRadius * visibleRadius);
 
     if (gtid < Meshlet.PrimCount)
         tris[gtid] = GetPrimitive(gtid);
@@ -75,7 +77,7 @@ void main(
     // Повторим код 2 раза, чтобы не было менее предсказуемого цикла
     iLocVert = gtid;
     if (iLocVert < Meshlet.VertCount)
-        verts[iLocVert] = GetVertexAttributes(Payload.Position.xyz, iLocVert);
+        verts[iLocVert] = GetVertexAttributes(Payload.Position.xyz, iLocVert, trisPerPixel);
     
     //iLocVert = gtid + 128;
     //if (iLocVert < Meshlet.VertCount)
