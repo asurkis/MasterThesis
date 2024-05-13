@@ -74,9 +74,11 @@ static void LoadAssets()
     }
 
 #ifdef USE_MONO_LODS
-    mainPipeline.Load(assetPath / "IA_VS.cso", assetPath / "MainPS.cso", assetPath / "IA_HeatmapGS.cso");
+    mainPipeline.Load(assetPath / "MainVS.cso", assetPath / "MainPS.cso");
+    // mainPipeline.Load(assetPath / "MainVS.cso", assetPath / "MainPS.cso", assetPath / "HeatmapGS.cso");
 #else
     mainPipeline.Load(assetPath / "MainMS.cso", assetPath / "MainPS.cso", assetPath / "MainAS.cso");
+    // mainPipeline.Load(assetPath / "HeatmapMS.cso", assetPath / "MainPS.cso", assetPath / "MainAS.cso");
     aabbPipeline.Load(assetPath / "AABB_MS.cso", assetPath / "AABB_PS.cso", assetPath / "MainAS.cso");
 #endif
 

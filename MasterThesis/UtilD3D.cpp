@@ -293,7 +293,8 @@ void TMonoPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeVS,
     psoDesc.BlendState                         = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
     psoDesc.SampleMask                         = UINT_MAX;
     psoDesc.RasterizerState                    = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-    psoDesc.RasterizerState.CullMode           = D3D12_CULL_MODE_NONE;
+    psoDesc.RasterizerState.FillMode           = D3D12_FILL_MODE_SOLID;
+    psoDesc.RasterizerState.CullMode           = D3D12_CULL_MODE_FRONT;
     psoDesc.DepthStencilState                  = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
     psoDesc.DepthStencilState.DepthFunc        = D3D12_COMPARISON_FUNC_GREATER;
     psoDesc.InputLayout.pInputElementDescs     = inputElementDesc;
