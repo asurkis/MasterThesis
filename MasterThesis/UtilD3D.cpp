@@ -247,13 +247,12 @@ void UpdateRenderTargetSize(UINT width, UINT height)
 
 static PResource GetCurRenderTarget() { return pRenderTargets[curFrame]; }
 
-void TMonoPipeline::Load(const std::filesystem::path &pathVS, const std::filesystem::path &pathPS)
+void TMonoPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeVS,
+                                 const std::vector<BYTE> &bytecodePS,
+                                 const std::vector<BYTE> &bytecodeGS)
 {
     PPipelineState pPipelineState;
     PRootSignature pRootSignature;
-
-    std::vector<BYTE> bytecodeVS = ReadFile(pathVS);
-    std::vector<BYTE> bytecodePS = ReadFile(pathPS);
 
     ThrowIfFailed(pDevice->CreateRootSignature(0, bytecodeVS.data(), bytecodeVS.size(), IID_PPV_ARGS(&pRootSignature)));
 
@@ -289,6 +288,8 @@ void TMonoPipeline::Load(const std::filesystem::path &pathVS, const std::filesys
     psoDesc.VS.BytecodeLength                  = bytecodeVS.size();
     psoDesc.PS.pShaderBytecode                 = bytecodePS.data();
     psoDesc.PS.BytecodeLength                  = bytecodePS.size();
+    psoDesc.GS.pShaderBytecode                 = bytecodeGS.data();
+    psoDesc.GS.BytecodeLength                  = bytecodeGS.size();
     psoDesc.BlendState                         = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
     psoDesc.SampleMask                         = UINT_MAX;
     psoDesc.RasterizerState                    = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
@@ -310,6 +311,23 @@ void TMonoPipeline::Load(const std::filesystem::path &pathVS, const std::filesys
 
     this->pPipelineState = std::move(pPipelineState);
     this->pRootSignature = std::move(pRootSignature);
+}
+
+void TMonoPipeline::Load(const std::filesystem::path &pathVS, const std::filesystem::path &pathPS)
+{
+    std::vector<BYTE> bytecodeVS = ReadFile(pathVS);
+    std::vector<BYTE> bytecodePS = ReadFile(pathPS);
+    LoadBytecode(bytecodeVS, bytecodePS, {});
+}
+
+void TMonoPipeline::Load(const std::filesystem::path &pathVS,
+                         const std::filesystem::path &pathPS,
+                         const std::filesystem::path &pathGS)
+{
+    std::vector<BYTE> bytecodeVS = ReadFile(pathVS);
+    std::vector<BYTE> bytecodePS = ReadFile(pathPS);
+    std::vector<BYTE> bytecodeGS = ReadFile(pathGS);
+    LoadBytecode(bytecodeVS, bytecodePS, bytecodeGS);
 }
 
 void TMeshletPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeAS,

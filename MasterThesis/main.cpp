@@ -4,7 +4,7 @@
 #include "UtilWin32.h"
 #include <DirectXMath.h>
 
-// #define USE_MONO_LODS
+#define USE_MONO_LODS
 
 using namespace DirectX;
 
@@ -74,7 +74,7 @@ static void LoadAssets()
     }
 
 #ifdef USE_MONO_LODS
-    mainPipeline.Load(assetPath / "MainVS.cso", assetPath / "MainPS.cso");
+    mainPipeline.Load(assetPath / "IA_VS.cso", assetPath / "MainPS.cso", assetPath / "IA_HeatmapGS.cso");
 #else
     mainPipeline.Load(assetPath / "MainMS.cso", assetPath / "MainPS.cso", assetPath / "MainAS.cso");
     aabbPipeline.Load(assetPath / "AABB_MS.cso", assetPath / "AABB_PS.cso", assetPath / "MainAS.cso");
@@ -189,7 +189,7 @@ static void FillCommandList()
     pCommandList->RSSetViewports(1, &viewport);
     pCommandList->RSSetScissorRects(1, &scissorRect);
 
-    CD3DX12_RESOURCE_BARRIER barriers[2];
+    CD3DX12_RESOURCE_BARRIER barriers[2] = {};
 
     barriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(pRenderTargets[curFrame].Get(),
                                                        D3D12_RESOURCE_STATE_PRESENT,

@@ -47,8 +47,15 @@ class TMonoPipeline
     PPipelineState pPipelineState;
     PRootSignature pRootSignature;
 
+    void LoadBytecode(const std::vector<BYTE> &dataVS,
+                      const std::vector<BYTE> &dataPS,
+                      const std::vector<BYTE> &dataGS);
+
   public:
     void Load(const std::filesystem::path &pathVS, const std::filesystem::path &pathPS);
+    void Load(const std::filesystem::path &pathVS,
+              const std::filesystem::path &pathPS,
+              const std::filesystem::path &pathGS);
 
     ID3D12PipelineState *GetStateRaw() const noexcept { return pPipelineState.Get(); }
     ID3D12RootSignature *GetRootSignatureRaw() const noexcept { return pRootSignature.Get(); }

@@ -1,5 +1,17 @@
 #include "MainCommon.hlsli"
 
+struct TVertexOut1
+{
+    float4 PositionHS : SV_Position;
+    float3 PositionVS : POSITION0;
+    float3 Normal : NORMAL0;
+};
+
+struct TPrimOut1
+{
+    float3 DiffuseColor : COLOR0;
+};
+
 groupshared TMeshlet Meshlet;
 
 uint3 UnpackPrimitive(uint primitive)
@@ -14,12 +26,12 @@ uint3 GetPrimitive(uint index)
     return UnpackPrimitive(prim);
 }
 
-TVertexOut GetVertexAttributes(float3 pos, uint iLocVert, float additionalInfo)
+TVertexOut1 GetVertexAttributes(float3 pos, uint iLocVert)
 {
     // uint iVert = GlobalIndices[Meshlet.VertOffset + iLocVert];
     uint iVert = Meshlet.VertOffset + iLocVert;
     TVertex v = Vertices[iVert];
-    TVertexOut vout;
+    TVertexOut1 vout;
     vout.PositionVS = mul(float4(v.Position + pos, 1), MainCB.MatView).xyz;
     vout.PositionHS = mul(float4(v.Position + pos, 1), MainCB.MatViewProj);
     vout.Normal = mul(float4(v.Normal, 0), MainCB.MatNormal).xyz;
@@ -48,10 +60,11 @@ TVertexOut GetVertexAttributes(float3 pos, uint iLocVert, float additionalInfo)
         }
     }
     */
-    vout.DiffuseColor = additionalInfo.xxx;
 
     return vout;
 }
+
+groupshared float4 VertPos[128];
 
 [RootSignature(ROOT_SIG)]
 [OutputTopology("triangle")]
@@ -60,26 +73,31 @@ void main(
     in payload TPayload Payload,
     uint gid : SV_GroupID,
     uint gtid : SV_GroupThreadID,
-    out vertices TVertexOut verts[128],
-    out indices uint3 tris[128])
+    out vertices TVertexOut1 Verts[128],
+    out primitives TPrimOut1 Prims[128],
+    out indices uint3 Idx[128])
 {
     Meshlet = Payload.Meshlets[gid];
     SetMeshOutputCounts(Meshlet.VertCount, Meshlet.PrimCount);
     
-    float visibleRadius = Payload.VisibleRadius[gid];
-    float trisPerPixel = Meshlet.PrimCount / (visibleRadius * visibleRadius);
-
-    if (gtid < Meshlet.PrimCount)
-        tris[gtid] = GetPrimitive(gtid);
-
-    uint iLocVert;
-    
-    // Повторим код 2 раза, чтобы не было менее предсказуемого цикла
-    iLocVert = gtid;
-    if (iLocVert < Meshlet.VertCount)
-        verts[iLocVert] = GetVertexAttributes(Payload.Position.xyz, iLocVert, trisPerPixel);
+    if (gtid < Meshlet.VertCount)
+    {
+        TVertexOut1 vert = GetVertexAttributes(Payload.Position.xyz, gtid);
+        Verts[gtid] = vert;
+        VertPos[gtid] = vert.PositionHS;
+    }
     
     //iLocVert = gtid + 128;
     //if (iLocVert < Meshlet.VertCount)
     //    verts[iLocVert] = GetVertexAttributes(Payload.Position.xyz, iLocVert);
+
+    if (gtid < Meshlet.PrimCount)
+    {
+        uint3 tri = GetPrimitive(gtid);
+        Idx[gtid] = tri;
+        float4 oa = VertPos[tri.x];
+        float4 ob = VertPos[tri.y];
+        float4 oc = VertPos[tri.z];
+        Prims[gtid].DiffuseColor = TriangleHeatmapColor(oa, ob, oc);
+    }
 }

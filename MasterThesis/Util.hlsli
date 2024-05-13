@@ -84,6 +84,36 @@ float3 PaletteColor(uint idx)
     return 1.xxx - float3(c) / 2047.0;
 }
 
+float3 HeatmapColor(float x)
+{
+    // blue -> cyan -> green -> yellow -> red
+    if (x < 0.25)
+        return float3(0.0, 4.0 * x, 1.0);
+    else if (x < 0.5)
+        return float3(0.0, 1.0, 4.0 * (0.5 - x));
+    else if (x < 0.75)
+        return float3(4.0 * (x - 0.5), 1.0, 0.0);
+    else
+        return float3(1.0, 4.0 * (1.0 - x), 0.0);
+}
+
+float TriangleArea(float4 oa4d, float4 ob4d, float4 oc4d)
+{
+    float2 oa2d = float2(MainCB.IntInfo.xy) * oa4d.xy / oa4d.w;
+    float2 ob2d = float2(MainCB.IntInfo.xy) * ob4d.xy / ob4d.w;
+    float2 oc2d = float2(MainCB.IntInfo.xy) * oc4d.xy / oc4d.w;
+    float2 ab = ob2d - oa2d;
+    float2 ac = oc2d - oa2d;
+    float area = 0.5 * (ab.x * ac.y - ab.y * ac.x);
+    return area;
+}
+
+float3 TriangleHeatmapColor(float4 oa, float4 ob, float4 oc)
+{
+    float area = TriangleArea(oa, ob, oc);
+    return HeatmapColor(2.0 / (1.0 + area));
+}
+
 uint GetZCodeComponent2(uint x)
 {
     x = x & 0x55555555;

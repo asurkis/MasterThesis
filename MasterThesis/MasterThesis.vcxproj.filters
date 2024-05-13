@@ -72,7 +72,10 @@
     <FxCompile Include="MainAS.hlsl">
       <Filter>Файлы ресурсов\Шейдеры</Filter>
     </FxCompile>
-    <FxCompile Include="MainVS.hlsl">
+    <FxCompile Include="IA_VS.hlsl">
+      <Filter>Файлы ресурсов\Шейдеры</Filter>
+    </FxCompile>
+    <FxCompile Include="IA_HeatmapGS.hlsl">
       <Filter>Файлы ресурсов\Шейдеры</Filter>
     </FxCompile>
   </ItemGroup>
