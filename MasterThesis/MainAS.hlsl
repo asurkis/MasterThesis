@@ -52,10 +52,10 @@ float PixelRadius(TBoundingBox box)
 
 bool IsEnough(float err, TBoundingBox box)
 {
-    float r = AngularRadius(box);
-    // float r = PixelRadius(box);
+    // float r = AngularRadius(box);
+    float r = PixelRadius(box);
+    return r * r / 128 < MainCB.FloatInfo.w;
     // return err * r < MainCB.FloatInfo.w;
-    return r < MainCB.FloatInfo.w;
 }
 
 bool ShouldDisplay(uint iMeshlet, out TMeshlet meshlet)
@@ -98,9 +98,9 @@ void main(
     uint iInstance = dtid.y;
     uint iMeshlet = MeshInfo.MeshletOffset + dtid.x;
     uint3 iPos = uint3(
-        GetZCodeComponent3(iInstance >> 0),
-        GetZCodeComponent3(iInstance >> 1),
-        GetZCodeComponent3(iInstance >> 2));
+        GetZCodeComponent2(iInstance >> 0),
+        0,
+        GetZCodeComponent2(iInstance >> 1));
     float3 pos = iPos * MainCB.FloatInfo.xyz;
     MeshPosition = pos;
     TMeshlet meshlet;

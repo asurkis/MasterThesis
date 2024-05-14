@@ -33,8 +33,8 @@ TMeshletPipeline mainPipeline;
 TMeshletPipeline aabbPipeline;
 #endif
 
-XMVECTOR camFocus  = XMVectorSet(-140.0f, 2010.0f, -150.0f, 0.0f);
-float    camRotX   = XMConvertToRadians(-30.0f);
+XMVECTOR camFocus  = XMVectorSet(-140.0f, 200.0f, -150.0f, 0.0f);
+float    camRotX   = XMConvertToRadians(-15.0f);
 float    camRotY   = XMConvertToRadians(45.0f);
 float    camSpeed  = 256.0f;
 float    camOffset = 3.0f;
@@ -43,7 +43,7 @@ float errorThreshold = 0.25f;
 int   displayType    = -1;
 
 int    nInstances     = 64;
-float3 instanceOffset = float3(400.0f, 600.0f, 400.0f);
+float3 instanceOffset = float3(300.0f, 600.0f, 300.0f);
 
 #ifndef USE_MONO_LODS
 bool drawModel       = true;
@@ -156,6 +156,16 @@ class TRaiiImgui
 
 std::optional<TRaiiImgui> raiiImgui;
 
+static uint GetZCodeComponent2(uint x)
+{
+    x = x & 0x55555555;
+    x = (x ^ (x >> 1)) & 0x33333333;
+    x = (x ^ (x >> 2)) & 0x0F0F0F0F;
+    x = (x ^ (x >> 4)) & 0x00FF00FF;
+    x = (x ^ (x >> 8)) & 0x0000FFFF;
+    return x;
+}
+
 static uint GetZCodeComponent3(uint x)
 {
     x = x & 0x49249249;
@@ -218,10 +228,9 @@ static void FillCommandList()
     model.Reset(displayType);
     for (int i = 0; i < nInstances; ++i)
     {
-        uint ix = GetZCodeComponent3(i >> 0);
-        uint iy = GetZCodeComponent3(i >> 1);
-        uint iz = GetZCodeComponent3(i >> 2);
-        model.Instance(float3(ix * instanceOffset.x, iy * instanceOffset.y, iz * instanceOffset.z));
+        uint ix = GetZCodeComponent2(i >> 0);
+        uint iz = GetZCodeComponent2(i >> 1);
+        model.Instance(float3(ix * instanceOffset.x, 0.0f, iz * instanceOffset.z));
     }
     model.Commit();
 #else
