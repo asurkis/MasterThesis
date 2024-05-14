@@ -6,14 +6,14 @@
 
 На рисунках~\ref{fig:mesh-example-wireframe} и~\ref{fig:mesh-example-solid} приведён пример меша в виде рёбер треугольников и самих треугольников соответственно.
 
-\begin{figure}[ht]
+\begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{pics/mesh-example-wireframe.png}
     \caption{Пример меша}
     \label{fig:mesh-example-wireframe}
 \end{figure}
 
-\begin{figure}[ht]
+\begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{pics/mesh-example-solid.png}
     \caption{Пример меша}
@@ -50,7 +50,7 @@ Sparse Voxel Octrees вместо описания поверхности объ
 Воксели являются кубическими ячейками трёхмерной сетки с малым шагом, например, 100~мкм.
 Иллюстрация Sparse Voxel Octree~\cite{WikipediaSparseVoxelOctreeExample} приведена на рисунке~\ref{fig:SVO-voxel-snowman-slice-01}.
 
-\begin{figure}[ht]
+\begin{figure}[H]
     \centering
     \includegraphics[width=5cm]{pics/SVO-voxel-snowman-slice-01.png}
     \caption{Срез Sparse Voxel Octree}
@@ -80,8 +80,9 @@ Nanite --- технология процедурного кластерного 
 За 4 года --- значительный срок для разработчиков компьютерных игр --- Epic Games остаётся единственной компанией, успешно внедрившей технологию процедурного кластерного видозависимого изменения детализации.
 Следовательно, у технологии есть какие-то существенные ограничения, сравнимые с преимуществами.
 
-Целью выпускной квалификационной работы является определение ограничений технологии процедурного кластерного видозависимого лоддирования.
-Задачи выпускной квалификационной работы:
+Целью выпускной квалификационной работы является демонстрация технологии процедурного кластерного видозависимого лоддирования и определение её ограничений.
+
+Для достижения этой цели поставлены следующие задачи:
 \begin{enumerate}
     \item изучить механизм работы Nanite;
     \item реализовать упрощённую систему процедурного кластерного видозависимого изменения детализации

@@ -33,8 +33,8 @@ TMeshletPipeline mainPipeline;
 TMeshletPipeline aabbPipeline;
 #endif
 
-XMVECTOR camFocus  = XMVectorSet(-140.0f, 200.0f, -150.0f, 0.0f);
-float    camRotX   = XMConvertToRadians(-15.0f);
+XMVECTOR camFocus  = XMVectorSet(-140.0f, 220.0f, -150.0f, 0.0f);
+float    camRotX   = XMConvertToRadians(-30.0f);
 float    camRotY   = XMConvertToRadians(45.0f);
 float    camSpeed  = 256.0f;
 float    camOffset = 3.0f;
@@ -461,6 +461,7 @@ LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
         case VK_ESCAPE: PostQuitMessage(0); break;
         case 'V': useVSync ^= true; break;
+        case 'F':
         case VK_F11:
             isFullScreen = !isFullScreen;
             if (isFullScreen)

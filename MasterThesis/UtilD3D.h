@@ -42,6 +42,12 @@ struct TMainData
 
 inline TMainData MainData;
 
+struct TInstanceInfo
+{
+    float3 Position;
+    uint   LOD;
+};
+
 class TMonoPipeline
 {
     PPipelineState pPipelineState;
@@ -104,12 +110,11 @@ class TMonoModelGPU
     float4                   mBBoxMin = {};
     float4                   mBBoxMax = {};
 
-    std::vector<float3> mInstances;
-    std::vector<float3> mInstancesOrdered;
-    std::vector<size_t> mPickedLods;
-    std::vector<size_t> mLodOffset;
-    size_t              mNInstances  = 0;
-    int                 mDisplayType = -1;
+    std::vector<TInstanceInfo> mInstances;
+    std::vector<TInstanceInfo> mInstancesOrdered;
+    std::vector<size_t>        mLodOffset;
+    size_t                     mNInstances  = 0;
+    int                        mDisplayType = -1;
 
     void   InitBBox(const TMonoLodCPU &lod);
     size_t PickLod(float3 pos) const;

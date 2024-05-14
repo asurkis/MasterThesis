@@ -261,6 +261,7 @@ void TMonoPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeVS,
         IE_POSITION = 0,
         IE_NORMAL,
         IE_INSTANCE_OFFSET,
+        IE_INSTANCE_LOD,
         IE_TOTAL
     };
 
@@ -281,6 +282,12 @@ void TMonoPipeline::LoadBytecode(const std::vector<BYTE> &bytecodeVS,
     inputElementDesc[IE_INSTANCE_OFFSET].AlignedByteOffset    = 0;
     inputElementDesc[IE_INSTANCE_OFFSET].InputSlotClass       = D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA;
     inputElementDesc[IE_INSTANCE_OFFSET].InstanceDataStepRate = 1;
+    inputElementDesc[IE_INSTANCE_LOD].SemanticName         = "INSTANCE_LOD";
+    inputElementDesc[IE_INSTANCE_LOD].Format               = DXGI_FORMAT_R32_UINT;
+    inputElementDesc[IE_INSTANCE_LOD].InputSlot            = 1;
+    inputElementDesc[IE_INSTANCE_LOD].AlignedByteOffset    = sizeof(float3);
+    inputElementDesc[IE_INSTANCE_LOD].InputSlotClass       = D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA;
+    inputElementDesc[IE_INSTANCE_LOD].InstanceDataStepRate = 1;
 
     D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
     psoDesc.pRootSignature                     = pRootSignature.Get();
@@ -520,11 +527,10 @@ void TMonoModelGPU::LoadGLBs(std::string_view basePath, size_t nLods, size_t nMa
 
     mInstances.resize(nMaxInstances);
     mInstancesOrdered.resize(nMaxInstances);
-    mPickedLods.resize(nMaxInstances);
     mLodOffset.resize(nLods + 1);
 
     CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_UPLOAD);
-    auto                    desc = CD3DX12_RESOURCE_DESC::Buffer(nMaxInstances * sizeof(float3));
+    auto                    desc = CD3DX12_RESOURCE_DESC::Buffer(nMaxInstances * sizeof(TInstanceInfo));
     ThrowIfFailed(pDevice->CreateCommittedResource(&heapProps,
                                                    D3D12_HEAP_FLAG_NONE,
                                                    &desc,
@@ -534,8 +540,8 @@ void TMonoModelGPU::LoadGLBs(std::string_view basePath, size_t nLods, size_t nMa
 
     mInstanceBufferView                = {};
     mInstanceBufferView.BufferLocation = pInstanceBuffer->GetGPUVirtualAddress();
-    mInstanceBufferView.SizeInBytes    = nMaxInstances * sizeof(float3);
-    mInstanceBufferView.StrideInBytes  = sizeof(float3);
+    mInstanceBufferView.SizeInBytes    = nMaxInstances * sizeof(TInstanceInfo);
+    mInstanceBufferView.StrideInBytes  = sizeof(TInstanceInfo);
 }
 
 void TMonoModelGPU::Reset(int displayType)
@@ -551,8 +557,8 @@ void TMonoModelGPU::Instance(float3 pos)
         pickedLod = mDisplayType;
     else
         pickedLod = PickLod(pos);
-    mInstances[mNInstances]  = pos;
-    mPickedLods[mNInstances] = pickedLod;
+    mInstances[mNInstances].Position  = pos;
+    mInstances[mNInstances].LOD      = pickedLod;
     ++mNInstances;
 }
 
@@ -563,11 +569,11 @@ void TMonoModelGPU::Commit()
 
     std::fill(mLodOffset.begin(), mLodOffset.end(), 0);
     for (size_t i = 0; i < mNInstances; ++i)
-        ++mLodOffset[mPickedLods[i] + 1];
+        ++mLodOffset[mInstances[i].LOD + 1];
     for (size_t i = 2; i <= LodCount(); ++i)
         mLodOffset[i] += mLodOffset[i - 1];
     for (size_t i = 0; i < mNInstances; ++i)
-        mInstancesOrdered[mLodOffset[mPickedLods[i]]++] = mInstances[i];
+        mInstancesOrdered[mLodOffset[mInstances[i].LOD]++] = mInstances[i];
     for (size_t i = LodCount(); i > 0; --i)
         mLodOffset[i] = mLodOffset[i - 1];
     mLodOffset[0] = 0;
@@ -575,8 +581,8 @@ void TMonoModelGPU::Commit()
     void         *pInstanceDataBegin = nullptr;
     CD3DX12_RANGE readRange(0, 0);
     ThrowIfFailed(pInstanceBuffer->Map(0, &readRange, &pInstanceDataBegin));
-    memcpy(pInstanceDataBegin, mInstancesOrdered.data(), sizeof(float3) * mNInstances);
-    CD3DX12_RANGE writtenRange(0, sizeof(float3) * mNInstances);
+    memcpy(pInstanceDataBegin, mInstancesOrdered.data(), sizeof(TInstanceInfo) * mNInstances);
+    CD3DX12_RANGE writtenRange(0, sizeof(TInstanceInfo) * mNInstances);
     pInstanceBuffer->Unmap(0, &writtenRange);
 
     pCommandList->IASetVertexBuffers(1, 1, &mInstanceBufferView);
