@@ -8,10 +8,12 @@
 
 using namespace DirectX;
 
-RECT beforeFullScreen = {};
-bool isFullScreen     = false;
+bool ShowImgui = true;
 
-bool useVSync = true;
+RECT BeforeFullScreen = {};
+bool IsFullScreen     = false;
+
+bool UseVSync = true;
 
 enum SrvDescriptors
 {
@@ -21,33 +23,33 @@ enum SrvDescriptors
 };
 
 PDescriptorHeap pSrvHeap;
-UINT            srvDescSize;
+UINT            SrvDescSize;
 
 ComPtr<ID3D12QueryHeap> pQueryHeap;
 PResource               pQueryResults;
 
 #ifdef USE_MONO_LODS
-TMonoPipeline mainPipeline;
+TMonoPipeline MainPipeline;
 #else
-TMeshletPipeline mainPipeline;
-TMeshletPipeline aabbPipeline;
+TMeshletPipeline MainPipeline;
+TMeshletPipeline AabbPipeline;
 #endif
 
-XMVECTOR camFocus  = XMVectorSet(-140.0f, 220.0f, -150.0f, 0.0f);
-float    camRotX   = XMConvertToRadians(-30.0f);
-float    camRotY   = XMConvertToRadians(45.0f);
-float    camSpeed  = 256.0f;
-float    camOffset = 3.0f;
+XMVECTOR CamFocus  = XMVectorSet(-140.0f, 220.0f, -150.0f, 0.0f);
+float    CamRotX   = XMConvertToRadians(-30.0f);
+float    CamRotY   = XMConvertToRadians(45.0f);
+float    CamSpeed  = 256.0f;
+float    CamOffset = 3.0f;
 
-float errorThreshold = 0.25f;
-int   displayType    = -1;
+float ErrorThreshold = 0.25f;
+int   DisplayType    = -1;
 
 int    nInstances     = 64;
-float3 instanceOffset = float3(300.0f, 600.0f, 300.0f);
+float3 InstanceOffset = float3(300.0f, 600.0f, 300.0f);
 
 #ifndef USE_MONO_LODS
-bool drawModel       = true;
-bool drawMeshletAABB = false;
+bool DrawModel       = true;
+bool DrawMeshletAABB = false;
 #endif
 
 PResource pMainCB;
@@ -70,16 +72,16 @@ static void LoadAssets()
         srvDesc.Flags                      = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         srvDesc.Type                       = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
         ThrowIfFailed(pDevice->CreateDescriptorHeap(&srvDesc, IID_PPV_ARGS(&pSrvHeap)));
-        srvDescSize = pDevice->GetDescriptorHandleIncrementSize(srvDesc.Type);
+        SrvDescSize = pDevice->GetDescriptorHandleIncrementSize(srvDesc.Type);
     }
 
 #ifdef USE_MONO_LODS
-    mainPipeline.Load(assetPath / "MainVS.cso", assetPath / "MainPS.cso");
-    // mainPipeline.Load(assetPath / "MainVS.cso", assetPath / "MainPS.cso", assetPath / "HeatmapGS.cso");
+    MainPipeline.Load(assetPath / "MainVS.cso", assetPath / "MainPS.cso");
+    // MainPipeline.Load(assetPath / "MainVS.cso", assetPath / "MainPS.cso", assetPath / "HeatmapGS.cso");
 #else
-    mainPipeline.Load(assetPath / "MainMS.cso", assetPath / "MainPS.cso", assetPath / "MainAS.cso");
-    // mainPipeline.Load(assetPath / "HeatmapMS.cso", assetPath / "MainPS.cso", assetPath / "MainAS.cso");
-    aabbPipeline.Load(assetPath / "AABB_MS.cso", assetPath / "AABB_PS.cso", assetPath / "MainAS.cso");
+    // MainPipeline.Load(assetPath / "MainMS.cso", assetPath / "MainPS.cso", assetPath / "MainAS.cso");
+    MainPipeline.Load(assetPath / "HeatmapMS.cso", assetPath / "MainPS.cso", assetPath / "MainAS.cso");
+    AabbPipeline.Load(assetPath / "AABB_MS.cso", assetPath / "AABB_PS.cso", assetPath / "MainAS.cso");
 #endif
 
     {
@@ -134,10 +136,10 @@ class TRaiiImgui
         ImGui_ImplWin32_Init(hWnd);
         CD3DX12_CPU_DESCRIPTOR_HANDLE cpuHandle(pSrvHeap->GetCPUDescriptorHandleForHeapStart(),
                                                 MY_SRV_DESC_IMGUI,
-                                                srvDescSize);
+                                                SrvDescSize);
         CD3DX12_GPU_DESCRIPTOR_HANDLE gpuHandle(pSrvHeap->GetGPUDescriptorHandleForHeapStart(),
                                                 MY_SRV_DESC_IMGUI,
-                                                srvDescSize);
+                                                SrvDescSize);
         ImGui_ImplDX12_Init(pDevice.Get(),
                             FRAME_COUNT,
                             DXGI_FORMAT_R8G8B8A8_UNORM,
@@ -179,7 +181,7 @@ static uint GetZCodeComponent3(uint x)
 static void FillCommandList()
 {
     ThrowIfFailed(pCommandAllocator->Reset());
-    ThrowIfFailed(pCommandList->Reset(pCommandAllocator.Get(), mainPipeline.GetStateRaw()));
+    ThrowIfFailed(pCommandList->Reset(pCommandAllocator.Get(), MainPipeline.GetStateRaw()));
 
     ID3D12DescriptorHeap *heapsToSet[] = {pSrvHeap.Get()};
     pCommandList->SetDescriptorHeaps(1, heapsToSet);
@@ -219,29 +221,29 @@ static void FillCommandList()
     pCommandList->ClearRenderTargetView(rtvHandle, CLEAR_COLOR, 0, nullptr);
     pCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 0.0f, 0, 0, nullptr);
 
-    pCommandList->SetGraphicsRootSignature(mainPipeline.GetRootSignatureRaw());
+    pCommandList->SetGraphicsRootSignature(MainPipeline.GetRootSignatureRaw());
     pCommandList->SetGraphicsRootConstantBufferView(0, pMainCB->GetGPUVirtualAddress());
 
     pCommandList->BeginQuery(pQueryHeap.Get(), D3D12_QUERY_TYPE_PIPELINE_STATISTICS, 0);
 
 #ifdef USE_MONO_LODS
-    model.Reset(displayType);
+    model.Reset(DisplayType);
     for (int i = 0; i < nInstances; ++i)
     {
         uint ix = GetZCodeComponent2(i >> 0);
         uint iz = GetZCodeComponent2(i >> 1);
-        model.Instance(float3(ix * instanceOffset.x, 0.0f, iz * instanceOffset.z));
+        model.Instance(float3(ix * InstanceOffset.x, 0.0f, iz * InstanceOffset.z));
     }
     model.Commit();
 #else
-    if (drawModel)
+    if (DrawModel)
     {
         model.Render(nInstances);
     }
 
-    if (drawMeshletAABB)
+    if (DrawMeshletAABB)
     {
-        pCommandList->SetPipelineState(aabbPipeline.GetStateRaw());
+        pCommandList->SetPipelineState(AabbPipeline.GetStateRaw());
         model.Render(nInstances);
     }
 #endif
@@ -272,52 +274,55 @@ static void OnRender()
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
 
-    ImGui::Begin("Info");
-    ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-    if (ImGui::CollapsingHeader("Stats"))
+    if (ShowImgui)
     {
-        void         *pResultsBegin = nullptr;
-        CD3DX12_RANGE readRange(0, sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS));
-        ThrowIfFailed(pQueryResults->Map(0, &readRange, &pResultsBegin));
-        auto pStats = reinterpret_cast<D3D12_QUERY_DATA_PIPELINE_STATISTICS *>(pResultsBegin);
-        ImGui::Text("Primitives invoked: %d", pStats->CInvocations);
-        ImGui::Text("Of them rendered: %d", pStats->CPrimitives);
-        ImGui::Text("Pixel shader invocations: %d", pStats->PSInvocations);
-        pQueryResults->Unmap(0, nullptr);
-
-        ImGui::Text("Width: %d", WindowWidth);
-        ImGui::Text("Height: %d", WindowHeight);
-    }
-    ImGui::Checkbox("VSync", &useVSync);
-    if (ImGui::CollapsingHeader("Camera"))
-    {
-        ImGui::SliderFloat("Movement speed", &camSpeed, 1.0f, 256.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-        ImGui::SliderFloat("Offset", &camOffset, 1.0f, 256.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-
-        float camFocusTmp[3] = {XMVectorGetX(camFocus), XMVectorGetY(camFocus), XMVectorGetZ(camFocus)};
-        if (ImGui::SliderFloat3("Focus", camFocusTmp, -1000.0f, 1000.0f))
-            camFocus = XMVectorSet(camFocusTmp[0], camFocusTmp[1], camFocusTmp[2], 0.0f);
-
-        float camRotDeg[] = {XMConvertToDegrees(camRotX), XMConvertToDegrees(camRotY)};
-        if (ImGui::SliderFloat2("Rotation (deg)", camRotDeg, -180.0f, 180.0f))
+        ImGui::Begin("Info");
+        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+        if (ImGui::CollapsingHeader("Stats"))
         {
-            camRotX = XMConvertToRadians(camRotDeg[0]);
-            camRotY = XMConvertToRadians(camRotDeg[1]);
+            void         *pResultsBegin = nullptr;
+            CD3DX12_RANGE readRange(0, sizeof(D3D12_QUERY_DATA_PIPELINE_STATISTICS));
+            ThrowIfFailed(pQueryResults->Map(0, &readRange, &pResultsBegin));
+            auto pStats = reinterpret_cast<D3D12_QUERY_DATA_PIPELINE_STATISTICS *>(pResultsBegin);
+            ImGui::Text("Primitives invoked: %d", pStats->CInvocations);
+            ImGui::Text("Of them rendered: %d", pStats->CPrimitives);
+            ImGui::Text("Pixel shader invocations: %d", pStats->PSInvocations);
+            pQueryResults->Unmap(0, nullptr);
+
+            ImGui::Text("Width: %d", WindowWidth);
+            ImGui::Text("Height: %d", WindowHeight);
         }
-    }
+        ImGui::Checkbox("VSync", &UseVSync);
+        if (ImGui::CollapsingHeader("Camera"))
+        {
+            ImGui::SliderFloat("Movement speed", &CamSpeed, 1.0f, 256.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+            ImGui::SliderFloat("Offset", &CamOffset, 1.0f, 256.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+
+            float camFocusTmp[3] = {XMVectorGetX(CamFocus), XMVectorGetY(CamFocus), XMVectorGetZ(CamFocus)};
+            if (ImGui::SliderFloat3("Focus", camFocusTmp, -1000.0f, 1000.0f))
+                CamFocus = XMVectorSet(camFocusTmp[0], camFocusTmp[1], camFocusTmp[2], 0.0f);
+
+            float camRotDeg[] = {XMConvertToDegrees(CamRotX), XMConvertToDegrees(CamRotY)};
+            if (ImGui::SliderFloat2("Rotation (deg)", camRotDeg, -180.0f, 180.0f))
+            {
+                CamRotX = XMConvertToRadians(camRotDeg[0]);
+                CamRotY = XMConvertToRadians(camRotDeg[1]);
+            }
+        }
 #ifdef USE_MONO_LODS
-    ImGui::SliderInt("LOD", &displayType, -1, model.LodCount() - 1);
+        ImGui::SliderInt("LOD", &DisplayType, -1, model.LodCount() - 1);
 #else
-    ImGui::Checkbox("Draw model", &drawModel);
-    ImGui::Checkbox("Draw meshlet AABB", &drawMeshletAABB);
-    ImGui::SliderInt("Meshlet layer", &displayType, -1, 3 * model.MaxLayer() + 1);
+        ImGui::Checkbox("Draw model", &DrawModel);
+        ImGui::Checkbox("Draw meshlet AABB", &DrawMeshletAABB);
+        ImGui::SliderInt("Meshlet layer", &DisplayType, -1, 3 * model.MaxLayer() + 1);
 #endif
-    ImGui::SliderFloat("Error threshold", &errorThreshold, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-    ImGui::SliderInt("Object count", &nInstances, 1, MAX_NUM_INSTANCES);
-    ImGui::SliderFloat("Object Offset X", &instanceOffset.x, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-    ImGui::SliderFloat("Object Offset Y", &instanceOffset.y, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-    ImGui::SliderFloat("Object Offset Z", &instanceOffset.z, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
-    ImGui::End();
+        ImGui::SliderFloat("Error threshold", &ErrorThreshold, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderInt("Object count", &nInstances, 1, MAX_NUM_INSTANCES);
+        ImGui::SliderFloat("Object Offset X", &InstanceOffset.x, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderFloat("Object Offset Y", &InstanceOffset.y, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderFloat("Object Offset Z", &InstanceOffset.z, 0.1f, 1000.0f, "%.3f", ImGuiSliderFlags_Logarithmic);
+        ImGui::End();
+    }
 
     float aspect    = float(WindowWidth) / float(WindowHeight);
     float deltaTime = ImGui::GetIO().DeltaTime;
@@ -326,22 +331,22 @@ static void OnRender()
     {
         ImVec2 mouseDelta = ImGui::GetMouseDragDelta(0, 0.0f);
         ImGui::ResetMouseDragDelta();
-        camRotX -= 4.0f * mouseDelta.y / float(WindowHeight);
-        camRotY -= 4.0f * mouseDelta.x / float(WindowHeight);
-        camRotX = std::clamp(camRotX, 0.001f - XM_PIDIV2, XM_PIDIV2 - 0.001f);
+        CamRotX -= 4.0f * mouseDelta.y / float(WindowHeight);
+        CamRotY -= 4.0f * mouseDelta.x / float(WindowHeight);
+        CamRotX = std::clamp(CamRotX, 0.001f - XM_PIDIV2, XM_PIDIV2 - 0.001f);
 
-        while (camRotY < -XM_PI)
-            camRotY += XM_2PI;
-        while (camRotY > XM_PI)
-            camRotY -= XM_2PI;
+        while (CamRotY < -XM_PI)
+            CamRotY += XM_2PI;
+        while (CamRotY > XM_PI)
+            CamRotY -= XM_2PI;
     }
 
     float camRotXSin = 0.0f;
     float camRotXCos = 0.0f;
     float camRotYSin = 0.0f;
     float camRotYCos = 0.0f;
-    XMScalarSinCos(&camRotXSin, &camRotXCos, camRotX);
-    XMScalarSinCos(&camRotYSin, &camRotYCos, camRotY);
+    XMScalarSinCos(&camRotXSin, &camRotXCos, CamRotX);
+    XMScalarSinCos(&camRotYSin, &camRotYCos, CamRotY);
 
     XMVECTOR vecForward  = XMVectorSet(camRotXCos * camRotYSin, camRotXSin, camRotXCos * camRotYCos, 0.0f);
     XMVECTOR vecUpGlobal = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
@@ -350,17 +355,17 @@ static void OnRender()
     if (!ImGui::GetIO().WantCaptureKeyboard)
     {
         if (ImGui::IsKeyDown(ImGuiKey_W))
-            camFocus += camSpeed * deltaTime * vecForward;
+            CamFocus += CamSpeed * deltaTime * vecForward;
         if (ImGui::IsKeyDown(ImGuiKey_S))
-            camFocus -= camSpeed * deltaTime * vecForward;
+            CamFocus -= CamSpeed * deltaTime * vecForward;
         if (ImGui::IsKeyDown(ImGuiKey_D))
-            camFocus += camSpeed * deltaTime * vecRight;
+            CamFocus += CamSpeed * deltaTime * vecRight;
         if (ImGui::IsKeyDown(ImGuiKey_A))
-            camFocus -= camSpeed * deltaTime * vecRight;
+            CamFocus -= CamSpeed * deltaTime * vecRight;
         if (ImGui::IsKeyDown(ImGuiKey_E))
-            camFocus += camSpeed * deltaTime * vecUpGlobal;
+            CamFocus += CamSpeed * deltaTime * vecUpGlobal;
         if (ImGui::IsKeyDown(ImGuiKey_Q))
-            camFocus -= camSpeed * deltaTime * vecUpGlobal;
+            CamFocus -= CamSpeed * deltaTime * vecUpGlobal;
     }
 
     XMVECTOR vecUp = XMVector3Cross(vecRight, vecForward);
@@ -382,15 +387,15 @@ static void OnRender()
                                   0.0f,
                                   1.0f);
 
-    MainData.CameraPos = camFocus - camOffset * vecForward;
+    MainData.CameraPos = CamFocus - CamOffset * vecForward;
     XMMATRIX matTrans  = XMMatrixTranslationFromVector(-MainData.CameraPos);
 
     MainData.MatView     = XMMatrixTranspose(matTrans * matRot);
     MainData.MatProj     = XMMatrixTranspose(XMMatrixPerspectiveFovRH(45.0f, aspect, 1000000.0f, 0.001f));
     MainData.MatViewProj = MainData.MatProj * MainData.MatView;
     MainData.MatNormal   = XMMatrixTranspose(XMMatrixInverse(nullptr, MainData.MatView));
-    MainData.FloatInfo   = XMVectorSet(instanceOffset.x, instanceOffset.y, instanceOffset.z, errorThreshold);
-    MainData.IntInfo     = XMVectorSetInt(WindowWidth, WindowHeight, displayType < 0 ? UINT32_MAX : displayType, 0);
+    MainData.FloatInfo   = XMVectorSet(InstanceOffset.x, InstanceOffset.y, InstanceOffset.z, ErrorThreshold);
+    MainData.IntInfo     = XMVectorSetInt(WindowWidth, WindowHeight, DisplayType < 0 ? UINT32_MAX : DisplayType, 0);
 
     void         *pCameraDataBegin = nullptr;
     CD3DX12_RANGE readRange(0, 0);
@@ -401,7 +406,7 @@ static void OnRender()
     FillCommandList();
     ExecuteCommandList();
 
-    if (useVSync)
+    if (UseVSync)
         ThrowIfFailed(pSwapChain->Present(1, 0));
     else
         ThrowIfFailed(pSwapChain->Present(0, DXGI_PRESENT_ALLOW_TEARING));
@@ -460,13 +465,14 @@ LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         switch (wParam)
         {
         case VK_ESCAPE: PostQuitMessage(0); break;
-        case 'V': useVSync ^= true; break;
+        case 'V': UseVSync ^= true; break;
+        case 'I': ShowImgui ^= true; break;
         case 'F':
         case VK_F11:
-            isFullScreen = !isFullScreen;
-            if (isFullScreen)
+            IsFullScreen ^= true;
+            if (IsFullScreen)
             {
-                GetWindowRect(hWnd, &beforeFullScreen);
+                GetWindowRect(hWnd, &BeforeFullScreen);
                 SetWindowLongW(hWnd, GWL_STYLE, WS_OVERLAPPED);
                 HMONITOR      hMonitor    = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
                 MONITORINFOEX monitorInfo = {};
@@ -487,10 +493,10 @@ LRESULT WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 SetWindowLongW(hWnd, GWL_STYLE, WS_OVERLAPPEDWINDOW);
                 SetWindowPos(hWnd,
                              HWND_NOTOPMOST,
-                             beforeFullScreen.left,
-                             beforeFullScreen.top,
-                             beforeFullScreen.right - beforeFullScreen.left,
-                             beforeFullScreen.bottom - beforeFullScreen.top,
+                             BeforeFullScreen.left,
+                             BeforeFullScreen.top,
+                             BeforeFullScreen.right - BeforeFullScreen.left,
+                             BeforeFullScreen.bottom - BeforeFullScreen.top,
                              SWP_FRAMECHANGED | SWP_NOACTIVATE);
                 ShowWindow(hWnd, SW_NORMAL);
             }

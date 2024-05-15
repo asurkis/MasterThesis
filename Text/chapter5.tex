@@ -60,37 +60,54 @@
 % При использовании вершин размером 24 байта и индексов размером 4 байта это даёт массив вершин размером 452.8 мегабайта (474~789~120 байт), в сравнении с суммарным размером массивов вершин и индексов в 216.6 мегабайт (227~117~800 байт), т.е. дополнительные 109\% потребляемой памяти.
 % Несмотря на это, подобный подход позволил увеличить производительность отрисовки, см. таблицу~\ref{tab:fps}.
 
-Скриншоты выполнения приведены на рисунках \ref{fig:impl-lod0}, \ref{fig:impl-cluster-2} и~\ref{fig:impl-mono}.
-Результаты измерений приведены в таблице~\ref{tab:fps}.
-На скриншотах не видно существенной разницы в сравнении с режимом отображения всех объектов в максимальной детализации, но заметно пятикратное увеличение производительности даже в худшей из полученных реализаций лодов.
+На рисунке~\ref{fig:comparison-0} приведён скриншот выполнения с наивысшей точностью --- остальные режимы исполнения настраиваются так, чтобы визуальные отличия с этим режимом были минимальны.
+На рисунках~\ref{fig:comparison-mono} и~\ref{fig:comparison-cluster} приведены скриншоты выполнения в режиме монолитного и кластерного лоддирования.
+Визуальная разница этих режимов с наивысшим разрешением несущественна.
 
 \begin{figure}[H]
-    \centering
     \includegraphics[width=\textwidth]{pics/comparison-0.png}
     \caption{Наивысшее разрешение, без лодов}
-    \label{fig:impl-lod0}
-\end{figure}
-
-% \begin{figure}[H]
-%     \centering
-%     \includegraphics[width=\textwidth]{pics/comparison-1.png}
-%     \caption{Кластерные лоды}
-%     \label{fig:impl-cluster-1}
-% \end{figure}
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{pics/comparison-2.png}
-    \caption{Кластерные лоды}
-    \label{fig:impl-cluster-2}
+    \label{fig:comparison-0}
 \end{figure}
 
 \begin{figure}[H]
-    \centering
-    \includegraphics[width=\textwidth]{pics/comparison-3.png}
+    \includegraphics[width=\textwidth]{pics/comparison-mono.png}
     \caption{Монолитные лоды}
-    \label{fig:impl-mono}
+    \label{fig:comparison-mono}
 \end{figure}
+
+\begin{figure}[H]
+    \includegraphics[width=\textwidth]{pics/comparison-cluster.png}
+    \caption{Кластерные лоды}
+    \label{fig:comparison-cluster}
+\end{figure}
+
+на рисунках~\ref{fig:heatmap-0}, \ref{fig:heatmap-mono} и~\ref{fig:heatmap-cluster} приведены карты площадей проекций отображаемых треугольников для наивысшей детализации, монолитных и кластерных лодов соответственно.
+Красным цветом обозначены треугольники, проекции которых имеют площадь 1 пиксель, зелёным --- 3 пикселя, бирюзовым --- 7 пикселей, синим --- более 15 пикселей.
+
+\begin{figure}[H]
+    \includegraphics[width=\textwidth]{pics/heatmap-0.png}
+    \caption{Площадь треугольников в наивысшем разрешении}
+    \label{fig:heatmap-0}
+\end{figure}
+
+\begin{figure}[H]
+    \includegraphics[width=\textwidth]{pics/heatmap-mono.png}
+    \caption{Площадь треугольников монолитных лодов}
+    \label{fig:heatmap-mono}
+\end{figure}
+
+\begin{figure}[H]
+    \includegraphics[width=\textwidth]{pics/heatmap-cluster.png}
+    \caption{Площадь треугольников кластерных лодов}
+    \label{fig:heatmap-cluster}
+\end{figure}
+
+Рисунок~\ref{fig:heatmap-0} показывает, что наивысшее разрешение сильно избыточно для всех объектов, кроме ближайшего к камере, и можно сэкономить вычислительное время, уменьшив детализацию.
+Рисунки~\ref{fig:heatmap-cluster} и~\ref{fig:heatmap-mono} показывают, что с помощью кластерных лодов удалось добиться более равномерной площади проекций треугольников, чем с помощью монолитных лодов.
+При этом концентрация малых треугольников на большом удалении от камеры показывает, что оценка, на основании которой производится выбор мешлетов, пока недостаточно точна, и нужно искать способы её улучшить.
+
+В таблице~\ref{tab:cmp} приведены результаты измерений.
 
 \begin{table}[h]
     \centering
@@ -102,49 +119,31 @@
         & Растеризовано
         & Пикселей \\ \hline
         Наивысшее разрешение
-        & 5.3
+        & 5.4
         & 640 000 000
-        & 631 812 157
-        & 2 473 141 \\
+        & 613 914 980
+        & 2 880 524 \\
         Монолитные лоды
-        & \textbf{117.8}
+        & \textbf{114.2}
         & 28 900 000
-        & 22 478 691
-        & 2 473 397 \\
+        & 25 871 716
+        & 2 880 722 \\
         % Кластерные лоды
         % & 27.2
         % & 56 021 881
         % & 55 940 686
         % & 2 492 760 \\
         Кластерные лоды
-        & 36.2
-        & 56 021 881
-        & 55 940 686
-        & 2 492 760 \\
+        & 35.0
+        & 58 677 326
+        & 57 256 188
+        & 2 901 182 \\
         \hline \hline
     \end{tabular}
 
     \caption{Сравнение производительности}
-    \label{tab:fps}
+    \label{tab:cmp}
 \end{table}
-
-На рисунках~\ref{fig:impl-heatmap-cluster} и~\ref{fig:impl-heatmap-mono} приведена карта площади отображаемых треугольников.
-Красным цветом обозначены треугольники, проекции которых имеют площадь 1 пиксель, зелёным --- 3 пикселя, бирюзовым --- 7 пикселей, синим --- более 15 пикселей.
-
-\begin{figure}[H]
-    \includegraphics[width=\textwidth]{pics/impl-heatmap-cluster.png}
-    \caption{Площадь треугольников мешлетов}
-    \label{fig:impl-heatmap-cluster}
-\end{figure}
-
-\begin{figure}[H]
-    \includegraphics[width=\textwidth]{pics/impl-heatmap-mono.png}
-    \caption{Площадь треугольников лодов}
-    \label{fig:impl-heatmap-mono}
-\end{figure}
-
-Рисунки~\ref{fig:impl-heatmap-cluster} и~\ref{fig:impl-heatmap-mono} показывают, что с помощью кластерных лодов удалось добиться более равномерной площади проекций треугольников, чем с помощью монолитных лодов.
-При этом концентрация малых треугольников на большом удалении от камеры показывает, что оценка, на основании которой производится выбор мешлетов, пока недостаточно точна, и нужно искать способы её улучшить.
 
 % \begin{figure}[H]
 %     \includegraphics[width=\textwidth]{pics/mono-switch-1.png}
