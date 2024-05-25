@@ -1,0 +1,42 @@
+\begin{frame}{Nanite}
+    Общий механизм работы Nanite\footnote{\url{https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf}} состоит из двух этапов:
+    \begin{itemize}
+        \item Предподсчёт --- преобразование модели
+        \item Непосредственно отрисовка
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Nanite: предподсчёт}
+    \begin{itemize}
+        \item Меш разбивается на мешлеты
+        \item Строится граф, в котором мешлеты --- вершины
+        \item Граф похож на дерево
+        \item Исходные мешлеты --- листья
+        \item \alert{Свойство графа: родитель менее детализирован, чем ребёнок, с любого ракурса}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Nanite: пример предподсчёта, шаг 1}
+    \centering \includesvg{metis-0.svg}
+\end{frame}
+
+\begin{frame}{Nanite: пример предподсчёта, шаг 2}
+    \centering \includesvg{metis-1.svg}
+\end{frame}
+
+\begin{frame}{Nanite: пример предподсчёта, шаг 3}
+    \centering \includesvg{metis-2.svg}
+\end{frame}
+
+\begin{frame}{Nanite: пример предподсчёта, шаг 4}
+    \centering \includesvg{metis-3.svg}
+\end{frame}
+
+\begin{frame}{Nanite: отрисовка}
+    \begin{itemize}
+        \item \alert{Решения об отрисовке мешлета независимы для всех мешлетов}
+        \item Массовый параллелизм
+        \item Корректность благодаря свойству графа
+        \item Треугольники в 1 пиксель обрабатываются отдельно
+    \end{itemize}
+\end{frame}
