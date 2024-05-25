@@ -1,11 +1,19 @@
-\begin{frame}{Реализация}
-    \includegraphics[width=\textwidth]{demo-0.png}
+\begin{frame}{Реализация упрощённой системы}
+    \begin{itemize}
+        \item Нужна для понимания, как работает Nanite
+        \item Преобразование меша в граф --- долгий предподсчёт
+        \item Разбиение меша с помощью библиотеки METIS
+        \item Невозможно задать жёсткое ограничение на размер мешлета, поэтому количество мешлетов берётся с запасом
+        \item Отрисовка --- Mesh Shader в DirectX 12
+    \end{itemize}
 \end{frame}
 
-\begin{frame}{Реализация}
-    \includegraphics[width=\textwidth]{demo-1.png}
-\end{frame}
+\begin{frame}{Реализация: скриншоты}
+    \begin{center}
+        \includegraphics[width=.45\textwidth]{../Text/pics/example-0.png}
+        \includegraphics[width=.45\textwidth]{../Text/pics/example-1.png}
 
-\begin{frame}{Реализация}
-    \includegraphics[width=\textwidth]{demo-2.png}
+        \includegraphics[width=.45\textwidth]{../Text/pics/example-2.png}
+        \includegraphics[width=.45\textwidth]{../Text/pics/example-3.png}
+    \end{center}
 \end{frame}
