@@ -17,12 +17,13 @@
 
 \defbeamertemplate*{title page}{customized}[1][]
 {
-    \begin{center}
+    \begingroup
+    \centering
+    \begin{beamercolorbox}[sep=8pt,center,rounded=true,shadow]{title}
         \usebeamerfont{title}
         \inserttitle
-        \par
-    \end{center}
-    \bigskip
+    \end{beamercolorbox}
+    \vskip1em\par
     \hfill
     \hbox{
         \usebeamerfont{author}
@@ -31,21 +32,27 @@
             Научный руководитель: & Попов Иван Александрович \\
         \end{tabular}
     }
-    \par
-    \begin{center}
-        \usebeamerfont{date}
-        Университет ИТМО
-        \par
-        \insertdate
-        \par
-    \end{center}
+    \vskip1em\par
+    \begin{beamercolorbox}[sep=8pt,center,#1]{institute}
+        % \usebeamerfont{institute}
+        \insertinstitute
+    \end{beamercolorbox}
+    \begin{beamercolorbox}[sep=8pt,center,#1]{date}
+        \usebeamerfont{date}\insertdate
+    \end{beamercolorbox}\vskip0.5em
+    {\usebeamercolor[fg]{titlegraphic}\inserttitlegraphic\par}
+    \endgroup
 }
 
 \title[Ограничения Nanite]{Исследование ограничений процедурного кластерного видозависимого лоддирования в современных компьютерных играх}
 \author{Антон Суркис}
+\institute{Университет ИТМО}
 
 \begin{document}
-    \maketitle
+    \begin{frame}
+        \titlepage
+        \thispagestyle{empty}
+    \end{frame}
     \include{introduction}
     \include{chapter1}
     \include{chapter2}
