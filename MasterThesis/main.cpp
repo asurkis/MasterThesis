@@ -79,8 +79,8 @@ static void LoadAssets()
     MainPipeline.Load(assetPath / "MainVS.cso", assetPath / "MainPS.cso");
     // MainPipeline.Load(assetPath / "MainVS.cso", assetPath / "MainPS.cso", assetPath / "HeatmapGS.cso");
 #else
-    // MainPipeline.Load(assetPath / "MainMS.cso", assetPath / "MainPS.cso", assetPath / "MainAS.cso");
-    MainPipeline.Load(assetPath / "HeatmapMS.cso", assetPath / "MainPS.cso", assetPath / "MainAS.cso");
+    MainPipeline.Load(assetPath / "MainMS.cso", assetPath / "MainPS.cso", assetPath / "MainAS.cso");
+    // MainPipeline.Load(assetPath / "HeatmapMS.cso", assetPath / "MainPS.cso", assetPath / "MainAS.cso");
     AabbPipeline.Load(assetPath / "AABB_MS.cso", assetPath / "AABB_PS.cso", assetPath / "MainAS.cso");
 #endif
 
